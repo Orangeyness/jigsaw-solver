@@ -11,13 +11,19 @@
 
 #include "PieceData.h"
 
+#define RIGHT_ANGLE_DIFF 8
+#define RIGHT_ANGLE_MIN 90 - RIGHT_ANGLE_DIFF
+#define RIGHT_ANGLE_MAX 90 + RIGHT_ANGLE_DIFF
 #define CRITICAL_THRESHOLD 110
 #define PI 3.14159265
 
 using namespace std;
 using namespace cv;
 
-void display(PieceData &piece, string window_name, vector<Point> &critical_points, vector<Point> &smoothed_edge) 
+Point origin_point(vector<Point>& edge);
+double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex);
+
+void display(PieceData &piece, string window_name, Point origin, vector<Point> &smoothed_edge, vector<Point> &corner_points)
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
@@ -33,10 +39,18 @@ void display(PieceData &piece, string window_name, vector<Point> &critical_point
 	drawContours(display_img, contours, 0, Scalar(0, 0, 255), 2);
 	drawContours(display_img, contours, 1, Scalar(0, 255, 0), 2);
 
-	for (int i = 0; i < critical_points.size(); i++) 
+	circle(display_img, origin, 5, Scalar(0, 255, 0), -1);
+
+	for (int i = 0; i < smoothed_edge.size(); i++) 
 	{
-		circle(display_img, critical_points[i], 5, Scalar(255, 0, 0), -1);
+		circle(display_img, smoothed_edge[i], 4, Scalar(255, 0, 0), -1);
 	}
+
+	for (int i = 0; i < corner_points.size(); i++) 
+	{
+		circle(display_img, corner_points[i], 6, Scalar(128, 0, 255), -1);
+	}
+
 
 	imshow(window_name, display_img);
 	imwrite("output.png", display_img);
@@ -48,6 +62,11 @@ double euclid_distance(int x1, int y1, int x2, int y2)
 	double dist2 = (double)(y1 - y2);
 
 	return sqrt(dist1 * dist1 + dist2 * dist2);
+}
+
+double euclid_distance(Point p1, Point p2)
+{
+	return euclid_distance(p1.x, p1.y, p2.x, p2.y);
 }
 
 double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex)
@@ -67,6 +86,82 @@ double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex)
 	return angle;
 }
 
+double area_of_rectangle(Point middle_vertex, Point prev_vertex, Point next_vertex) 
+{
+	double length1 = euclid_distance(middle_vertex, prev_vertex);
+	double length2 = euclid_distance(middle_vertex, next_vertex);
+
+	return length1 * length2;
+}
+
+Point origin_point(vector<Point>& edge) 
+{
+	long total_x = 0;
+	long total_y = 0;
+	
+	for (int i = 0; i < edge.size(); i++) 
+	{
+		total_x += edge[i].x;
+		total_y += edge[i].y;
+	}
+
+	int point_x = (int) (((double)total_x) / edge.size());
+	int point_y = (int) (((double)total_y) / edge.size());
+
+	return Point (point_x, point_y);
+}
+
+vector<Point> find_critical_points(vector<Point>& smoothed_edge, Point origin)
+{
+	double greatest_area = 0;
+	vector<Point> corner_points (4);
+
+	for (int i = 0; i < smoothed_edge.size(); i++) 
+	{
+		double angle;
+		for (int j = 0; j < smoothed_edge.size(); j++) 
+		{
+			if (j == i) continue;
+
+			for (int k = 0; k < smoothed_edge.size(); k++) 
+			{
+				if (k == j || k == i) continue;
+				
+				angle = interior_angle(smoothed_edge[i], smoothed_edge[j], smoothed_edge[k]);
+				if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+
+				for (int l = 0; l < smoothed_edge.size(); l++) 
+				{
+					if (l == k || l == j || l == i) continue;
+
+					angle = interior_angle(smoothed_edge[k], smoothed_edge[i], smoothed_edge[l]);
+					if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+					
+					angle = interior_angle(smoothed_edge[l], smoothed_edge[k], smoothed_edge[j]);
+					if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+
+					double area = area_of_rectangle(smoothed_edge[l], smoothed_edge[k], smoothed_edge[j]);
+					if (area > greatest_area) 
+					{
+						greatest_area = area;
+						corner_points[0] = smoothed_edge[i];
+						corner_points[1] = smoothed_edge[j];
+						corner_points[2] = smoothed_edge[k];
+						corner_points[3] = smoothed_edge[l];
+					}
+				}
+			}
+		}
+	}
+
+	if (greatest_area == 0)
+	{
+		corner_points.clear();
+	}
+
+	return corner_points;
+}
+
 int main(int argc, char* argv[]) 
 {
 	string piece_filename = string(argv[1]);
@@ -74,76 +169,20 @@ int main(int argc, char* argv[])
 	PieceData pd (piece_filename);
 
 	vector<Point> edge = pd.edge();
-	list<Point> smoothed_edge;
-	vector<Point> critical_points;
+	vector<Point> smoothed_edge (edge.size());
 
-	for (int i = 0; i < edge.size(); i++) 
-		smoothed_edge.push_back(edge[i]);
+	approxPolyDP(edge, smoothed_edge, 20, true);
 
-	int prev_x = edge[0].x;
-	int prev_y = edge[0].y;
-	double prev_angle = 0;
+	Point origin = origin_point(smoothed_edge);
 
-	list<Point>::iterator it;
-	for (it = ++(smoothed_edge.begin()); it != smoothed_edge.end(); ++it)
+	vector<Point> corner_points = find_critical_points(smoothed_edge, origin);
+
+	if (corner_points.size() == 0)
 	{
-		if (++it == smoothed_edge.end()) break;
-		it--;
-
-		Point prevPoint = *(--it);
-		Point currentPoint = *(++it);
-		Point nextPoint = *(++it);
-
-		it--;
-
-		double dist_a = euclid_distance(prevPoint.x, prevPoint.y, currentPoint.x, currentPoint.y);
-		double dist_b = euclid_distance(currentPoint.x, currentPoint.y, nextPoint.x, nextPoint.y);
-		double dist_total = euclid_distance(prevPoint.x, prevPoint.y, nextPoint.x, nextPoint.y);
-
-		//double first_angle = atan2(edge[i].x - edge[i+1].x, edge[i].y - edge[i+1].y) * 180 / PI;
-		//double second_angle = atan2(edge[i+1].x - edge[i+3].x, edge[i+1].y - edge[i+3].y) * 180 / PI;
-		//double complete_angle = atan2(edge[i].x - edge[i+2].x, edge[i].y - edge[i+2].y) * 180 / PI;
-
-		//cout << dist_a << " | " << dist_b << " | " << dist_total << " | A+B = " << dist_a + dist_b << " | C*1.1 = " << dist_total*1.1 << endl;
-		//if (abs(first_angle - second_angle) > 30)
-		if (dist_a + dist_b < dist_total*1.05)
-		{
-			it = smoothed_edge.erase(it);
-			it--;
-		}
+		cout << "Does not appear to be valid piece" << endl;
 	}
 
-	vector<Point> smoothed;
-	for (it = smoothed_edge.begin(); it != smoothed_edge.end(); it++)
-		smoothed.push_back(*it);
-
-
-	for (int i = 1; i < smoothed.size()-1; i+=1) 
-	{
-		Point prevPoint = smoothed[i-1];
-		Point currentPoint = smoothed[i];
-		Point nextPoint = smoothed[i+1];
-
-		//double angle = atan2(x - prev_x, y - prev_y) * 180 / PI;
-		//double delta_angle = abs(angle - prev_angle);
-	
-		//cout << x << ", " << y << " | a = " << angle << " | delta_a = " << delta_angle << endl;
-
-		double angle = interior_angle(currentPoint, prevPoint, nextPoint);
-
-		cout << angle << endl;
-
-		if (angle < CRITICAL_THRESHOLD) 
-		{
-			critical_points.push_back(smoothed[i]);
-		}
-
-		//prev_angle = angle;
-		//prev_x = x;
-		//prev_y = y;
-	}
-
-	display(pd, piece_filename, critical_points, smoothed);
+	display(pd, piece_filename, origin, smoothed_edge, corner_points);
 
 	waitKey();
 
