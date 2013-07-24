@@ -10,6 +10,9 @@
 #include <sstream>
 #include <stdexcept>
 
+#define PI 3.14159265
+#define TO_RAD(x) (x * PI / 180.0)
+
 #define EDGE_COUNT 4
 #define EDGE_TYPE_FLAT 0
 #define EDGE_TYPE_IN 1
@@ -37,6 +40,8 @@ class PieceData {
 		PieceData(Mat* src_data, vector<Point> edge_data);
 		PieceData(string filename);
 
+		void fixRotation(double rotation);
+	
 		void setOrigin(Point origin);
 		void setCornerIndexs(vector<int> indexs);
 		void setEdgeType(int edge, int type);
@@ -48,6 +53,7 @@ class PieceData {
 		Point origin();
 		int getCornerIndex(int num);
 		list<Point>* getEdgePoints(int num);
+		int getEdgeType(int num);
 	};
 
 

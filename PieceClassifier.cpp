@@ -16,10 +16,6 @@
 #define RIGHT_ANGLE_MIN 90 - RIGHT_ANGLE_DIFF
 #define RIGHT_ANGLE_MAX 90 + RIGHT_ANGLE_DIFF
 #define CRITICAL_THRESHOLD 110
-#define PI 3.14159265
-
-using namespace std;
-using namespace cv;
 
 Point origin_point(vector<Point>& edge);
 double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex);
@@ -63,7 +59,6 @@ void display(PieceData &piece, vector<Point> &smoothed_edge, string window_name)
 	{
 		circle(display_img, piece.edge()[piece.getCornerIndex(i)], 6, Scalar(128, 0, 255), -1);
 	}
-
 
 	imshow(window_name, display_img);
 	imwrite("output.png", display_img);
@@ -277,6 +272,17 @@ int main(int argc, char* argv[])
 
 		cout << EDGE_DIR_NAMES[i] << ": " << EDGE_TYPE_NAMES[type] << endl;
 	}
+
+	
+	/*
+	Point top_left = pd.edge()[pd.getCornerIndex(0)];
+	Point bottom_left = pd.edge()[pd.getCornerIndex(1)];
+	Point normalised_bottom_left = bottom_left;
+	normalised_bottom_left.x = top_left.x;
+	
+	double rotation = interior_angle(top_left, bottom_left, normalised_bottom_left);
+	cout << rotation << endl;
+	*/
 
 	display(pd, smoothed_edge, piece_filename);
 

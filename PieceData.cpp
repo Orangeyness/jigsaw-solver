@@ -1,5 +1,8 @@
 #include "PieceData.h"
 
+#include <iostream>
+using namespace std;
+
 const string EDGE_DIR_NAMES[] = { "TOP", "LEFT", "BOTTOM", "RIGHT" };
 const string EDGE_TYPE_NAMES[] = { "FLAT", "IN", "OUT"};
 
@@ -75,13 +78,20 @@ PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType
 
 	m_origin = Point(x, y);
 
+	bool non_zero = false;
+
 	for (int i = 0; i < 4; i++)
 	{
 		fs >> x;
 		fs >> y;
 		m_cornerIndexs[i] = x;
 		m_edgeType[i] = y;
+		
+		if (x != 0) non_zero = true;
 	}
+
+	if (non_zero) splitEdges();
+
 }
 
 
@@ -156,8 +166,37 @@ list<Point>* PieceData::getEdgePoints(int num)
 	return &m_edgeList[num];
 }
 
+int PieceData::getEdgeType(int num)
+{
+	return m_edgeType[num];
+}
+
+// Doesn't work quite yet...
+void PieceData::fixRotation(double rotation)
+{
+	rotation = TO_RAD(rotation);
+
+	cout << rotation << endl;
+
+	int rotation_origin_x = m_edgeData[m_cornerIndexs[0]].x;
+	int rotation_origin_y = m_edgeData[m_cornerIndexs[0]].y;
+
+	for (int i = 0; i < m_edgeData.size(); i++) 
+	{
+		m_edgeData[i].x = rotation_origin_x + (m_edgeData[i].x - rotation_origin_x)*cos(rotation) - (m_edgeData[i].x - rotation_origin_x)*sin(rotation);
+		m_edgeData[i].y = rotation_origin_y + (m_edgeData[i].y - rotation_origin_y)*sin(rotation) + (m_edgeData[i].y - rotation_origin_y)*cos(rotation);
+	}
+
+	splitEdges();
+}
+
 void PieceData::splitEdges()
 {
+	for (int i = 0; i < EDGE_COUNT; i++) 
+	{
+		m_edgeList[i].clear();
+	}
+
 	int edge_index = 0;
 	bool insert_end = true;
 	list<Point>::iterator it;
