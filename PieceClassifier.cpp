@@ -24,12 +24,12 @@ using namespace cv;
 Point origin_point(vector<Point>& edge);
 double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex);
 
-void drawLineList(Mat display_img, list<Point>& point_list, Scalar color, int line_width)
+void drawLineList(Mat display_img, list<Point>* point_list, Scalar color, int line_width)
 {
-	list<Point>::iterator it = point_list.begin();
+	list<Point>::iterator it = point_list->begin();
 	Point* prev_point = &*it;
 
-	while(++it != point_list.end())
+	while(++it != point_list->end())
 	{
 		Point* current_point = &*it;
 		line(display_img, *prev_point, *current_point, color, line_width);
@@ -38,7 +38,7 @@ void drawLineList(Mat display_img, list<Point>& point_list, Scalar color, int li
 	}
 }
 
-void display(PieceData &piece, string window_name, Point origin, vector<Point> &smoothed_edge, vector<int> &corner_points, vector< list<Point> > &individual_edges)
+void display(PieceData &piece, vector<Point> &smoothed_edge, string window_name)
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
@@ -47,27 +47,21 @@ void display(PieceData &piece, string window_name, Point origin, vector<Point> &
 	display_img.create(raw_img.size(), raw_img.type());
 	raw_img.copyTo(display_img);
 
-	/*vector< vector<Point> > contours;
-	contours.push_back(piece.edge());
-	contours.push_back(smoothed_edge);
-	drawContours(display_img, contours, 0, Scalar(0, 0, 255), 2);
-	drawContours(display_img, contours, 1, Scalar(255, 0, 0), 2);*/
+	drawLineList(display_img, piece.getEdgePoints(0), Scalar(128, 128, 0), 2);
+	drawLineList(display_img, piece.getEdgePoints(1), Scalar(0, 255, 0), 2);
+	drawLineList(display_img, piece.getEdgePoints(2), Scalar(0, 0, 255), 2);
+	drawLineList(display_img, piece.getEdgePoints(3), Scalar(255, 255, 210), 2);
 
-	drawLineList(display_img, individual_edges[0], Scalar(128, 128, 0), 2);
-	drawLineList(display_img, individual_edges[1], Scalar(0, 255, 0), 2);
-	drawLineList(display_img, individual_edges[2], Scalar(0, 0, 255), 2);
-	drawLineList(display_img, individual_edges[3], Scalar(255, 255, 210), 2);
-
-	circle(display_img, origin, 5, Scalar(0, 255, 0), -1);
+	circle(display_img, piece.origin(), 5, Scalar(0, 255, 0), -1);
 
 	for (int i = 0; i < smoothed_edge.size(); i++) 
 	{
 		circle(display_img, smoothed_edge[i], 4, Scalar(255, 0, 0), -1);
 	}
 
-	for (int i = 0; i < corner_points.size(); i++) 
+	for (int i = 0; i < EDGE_COUNT; i++) 
 	{
-		circle(display_img, piece.edge()[corner_points[i]], 6, Scalar(128, 0, 255), -1);
+		circle(display_img, piece.edge()[piece.getCornerIndex(i)], 6, Scalar(128, 0, 255), -1);
 	}
 
 
@@ -200,40 +194,6 @@ vector<int> find_corner_indexs(vector<Point>& edge, vector<Point>& corner_points
 	return corner_indexs;
 }
 
-vector< list<Point> > split_edges(vector<Point>& edge, vector<int>& corner_indexs)
-{
-	vector< list<Point> > individual_edges (4);
-
-	int edge_index = 0;
-	bool insert_end = true;
-	list<Point>::iterator it;
-	for (int i = 0; i < edge.size(); i++) 
-	{
-		if (insert_end)
-		{
-			individual_edges[edge_index].push_back(edge[i]);
-		}
-		else
-		{
-			individual_edges[edge_index].insert(it, edge[i]);
-		}
-
-
-		if (i == corner_indexs[edge_index])
-		{
-			edge_index = (edge_index + 1) % 4;
-			if (edge_index == 0)
-			{
-				insert_end = false;
-				it = individual_edges[edge_index].begin();
-			}
-
-			i--;
-		}
-	}
-	
-	return individual_edges;
-}
 
 double distance_from_line(double cx, double cy, double ax, double ay, double bx, double by)
 {
@@ -257,32 +217,28 @@ bool side_of_line(Point a, Point b, Point c)
      return ((b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)) > 0;
 }
 
-int classify_edge(list<Point> edge, Point origin)
+int classify_edge(list<Point>* edge, Point origin)
 {
-	Point first_corner = edge.front();
-	Point second_corner = edge.back();
+	Point first_corner = edge->front();
+	Point second_corner = edge->back();
 	list<Point>::iterator it;
 	
 	bool origin_side_of_line = side_of_line(origin, first_corner, second_corner);
 	
-	for(it = edge.begin(); it != edge.end(); it++) 
+	for(it = edge->begin(); it != edge->end(); it++) 
 	{
 		if (distance_from_line(*it, first_corner, second_corner) > 20) 
 		{
 			bool side = side_of_line(*it, first_corner, second_corner);
 			
 			if (side == origin_side_of_line)  
-				cout << "IN" << endl;
+				return EDGE_TYPE_IN;
 			else
-				cout << "OUT" << endl;
-
-			return 1;
+				return EDGE_TYPE_OUT;
 		}
 	}
 
-	cout << "FLAT" << endl;
-
-	return 0;
+	return EDGE_TYPE_FLAT;
 }
 
 int main(int argc, char* argv[]) 
@@ -296,9 +252,9 @@ int main(int argc, char* argv[])
 
 	approxPolyDP(edge, smoothed_edge, 20, true);
 
-	Point origin = origin_point(smoothed_edge);
+	pd.setOrigin(origin_point(smoothed_edge));
 
-	vector<Point> corner_points = find_corner_points(smoothed_edge, origin);
+	vector<Point> corner_points = find_corner_points(smoothed_edge, pd.origin());
 
 	if (corner_points.size() == 0)
 	{
@@ -310,14 +266,21 @@ int main(int argc, char* argv[])
 
 	sort(corner_indexs.begin(), corner_indexs.end());
 	
-	vector< list<Point> > individual_edges = split_edges(edge, corner_indexs);
-	
-	for (int i = 0; i < individual_edges.size(); i++) 
+	pd.setCornerIndexs(corner_indexs);
+
+
+	for (int i = 0; i < EDGE_COUNT; i++) 
 	{
-		classify_edge(individual_edges[i], origin);
+		int type = classify_edge(pd.getEdgePoints(i), pd.origin());
+
+		pd.setEdgeType(i, type);
+
+		cout << EDGE_DIR_NAMES[i] << ": " << EDGE_TYPE_NAMES[type] << endl;
 	}
 
-	display(pd, piece_filename, origin, smoothed_edge, corner_indexs, individual_edges);
+	display(pd, smoothed_edge, piece_filename);
+
+	pd.write(piece_filename);
 
 	waitKey();
 

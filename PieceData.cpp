@@ -1,13 +1,15 @@
 #include "PieceData.h"
 
+const string EDGE_DIR_NAMES[] = { "TOP", "LEFT", "BOTTOM", "RIGHT" };
+const string EDGE_TYPE_NAMES[] = { "FLAT", "IN", "OUT"};
 
-PieceData::PieceData(Mat image_data, vector<Point> edge_data) 
+PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
 	m_imageData = image_data;
 	m_edgeData = edge_data;
 }
 
-PieceData::PieceData(Mat* src_data, vector<Point> edge_data) 
+PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
 	m_edgeData = edge_data;
 
@@ -25,10 +27,10 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data)
 	drawContours(mask, contours, 0, Scalar(255, 255, 255), -1);
 	
 	Point center = Point(	bounding_rect.x + bounding_rect.width/2,
-							bounding_rect.y + bounding_rect.height/2
-							);
+				bounding_rect.y + bounding_rect.height/2
+				);
 	
-	floodFill(mask, center, Scalar(255, 255, 255));
+	//floodFill(mask, center, Scalar(255, 255, 255));
 
 	//Copy and crop the piece
 	bitwise_and(mask, *src_data, m_imageData);
@@ -43,7 +45,7 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data)
 
 }
 
-PieceData::PieceData(string name)
+PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
 	stringstream image_filename;
 	stringstream edge_filename;
@@ -67,6 +69,19 @@ PieceData::PieceData(string name)
 
 		m_edgeData.push_back(Point(x, y));
 	}
+
+	fs >> x;
+	fs >> y;
+
+	m_origin = Point(x, y);
+
+	for (int i = 0; i < 4; i++)
+	{
+		fs >> x;
+		fs >> y;
+		m_cornerIndexs[i] = x;
+		m_edgeType[i] = y;
+	}
 }
 
 
@@ -88,7 +103,31 @@ void PieceData::write(string name)
 		fs << m_edgeData[i].x << " " << m_edgeData[i].y << endl;
 	}
 
+	fs << m_origin.x << " " << m_origin.y << endl;
+	
+	for (int i = 0; i < m_cornerIndexs.size(); i++)
+	{
+		fs << m_cornerIndexs[i] << " " << m_edgeType[i] << endl;
+	}
+
 	fs.close();
+}
+
+void PieceData::setOrigin(Point origin)
+{
+	m_origin = origin;
+}
+
+void PieceData::setCornerIndexs(vector<int> indexs)
+{
+	m_cornerIndexs = indexs;
+	
+	splitEdges();
+}
+
+void PieceData::setEdgeType(int edge, int type)
+{
+	m_edgeType[edge] = type;
 }
 
 Mat PieceData::image() 
@@ -99,4 +138,52 @@ Mat PieceData::image()
 vector<Point> PieceData::edge()
 {
 	return m_edgeData;
+}
+
+Point PieceData::origin()
+{
+	return m_origin;
+}
+
+int PieceData::getCornerIndex(int num)
+{
+	return m_cornerIndexs[num];
+}
+
+
+list<Point>* PieceData::getEdgePoints(int num)
+{
+	return &m_edgeList[num];
+}
+
+void PieceData::splitEdges()
+{
+	int edge_index = 0;
+	bool insert_end = true;
+	list<Point>::iterator it;
+	for (int i = 0; i < m_edgeData.size(); i++) 
+	{
+		if (insert_end)
+		{
+			m_edgeList[edge_index].push_back(m_edgeData[i]);
+		}
+		else
+		{
+			m_edgeList[edge_index].insert(it, m_edgeData[i]);
+		}
+
+
+		if (i == m_cornerIndexs[edge_index])
+		{
+			edge_index = (edge_index + 1) % 4;
+			if (edge_index == 0)
+			{
+				insert_end = false;
+				it = m_edgeList[edge_index].begin();
+			}
+
+			i--;
+		}
+	}
+	
 }
