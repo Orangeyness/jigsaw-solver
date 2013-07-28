@@ -3,7 +3,7 @@
 #include <iostream>
 using namespace std;
 
-const string EDGE_DIR_NAMES[] = { "TOP", "LEFT", "BOTTOM", "RIGHT" };
+const string EDGE_DIR_NAMES[] = { "TEAL", "GREEN", "RED", "WHITE" };
 const string EDGE_TYPE_NAMES[] = { "FLAT", "IN", "OUT"};
 
 PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
@@ -33,8 +33,6 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4)
 				bounding_rect.y + bounding_rect.height/2
 				);
 	
-	//floodFill(mask, center, Scalar(255, 255, 255));
-
 	//Copy and crop the piece
 	bitwise_and(mask, *src_data, m_imageData);
 	m_imageData = m_imageData(bounding_rect);

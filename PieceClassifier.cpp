@@ -222,7 +222,7 @@ int classify_edge(list<Point>* edge, Point origin)
 	
 	for(it = edge->begin(); it != edge->end(); it++) 
 	{
-		if (distance_from_line(*it, first_corner, second_corner) > 20) 
+		if (distance_from_line(*it, first_corner, second_corner) > 30)
 		{
 			bool side = side_of_line(*it, first_corner, second_corner);
 			

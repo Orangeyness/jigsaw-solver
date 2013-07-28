@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #define PI 3.14159265
+#define TO_DEGREE(X) (X * 180.0 / PI)
 #define TO_RAD(x) (x * PI / 180.0)
 
 #define EDGE_COUNT 4
