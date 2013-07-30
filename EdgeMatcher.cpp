@@ -13,6 +13,9 @@
 #include "PieceData.h"
 #include "Edge.h"
 
+#define COUPLING_DISTANCE_THRESHOLD 35
+#define H_DISTANCE_THRESHOLD 12
+
 double euclid_distance(int x1, int y1, int x2, int y2) 
 {
 	double dist1 = (double)(x1 - x2);
@@ -24,6 +27,60 @@ double euclid_distance(int x1, int y1, int x2, int y2)
 double euclid_distance(Point p1, Point p2)
 {
 	return euclid_distance(p1.x, p1.y, p2.x, p2.y);
+}
+
+double compute_coupling_distance(vector<Point>& curveA, vector<Point>& curveB, int i, int j, vector<vector<double> >& ca)
+{
+	if (ca[i][j] > -1) return ca[i][j];
+
+	if (i == 0 && j == 0) 
+	{
+		ca[i][j] = euclid_distance(curveA[i], curveB[j]);
+	}
+	else if (i > 0 && j == 0) 
+	{
+		ca[i][j] = max(compute_coupling_distance(curveA, curveB, i - 1, j, ca), euclid_distance(curveA[i], curveB[j]));
+	}
+	else if (i == 0 && j > 0) 
+	{
+		ca[i][j] = max(compute_coupling_distance(curveA, curveB, i, j -1, ca), euclid_distance(curveA[i], curveB[j]));
+	}
+	else
+	{
+		// i > 0 && j > 0
+		double minus_i = compute_coupling_distance(curveA, curveB, i - 1, j, ca);
+		double minus_j = compute_coupling_distance(curveA, curveB, i, j -1, ca);
+		double minus_ij = compute_coupling_distance(curveA, curveB, i - 1, j - 1, ca);
+
+		ca[i][j] = max(min(minus_i, min(minus_j, minus_ij)), euclid_distance(curveA[i], curveB[j]));
+	}
+
+	//cout << i << ", " << j << " = " << ca[i][j] << endl;
+
+	return ca[i][j];
+}
+
+double coupling_distance(list<Point>* curveA, list<Point>* curveB)
+{
+	vector<vector<double> > ca (curveA->size());
+
+	for (int i = 0; i < curveA->size(); i++) 
+	{
+		ca[i] = vector<double>(curveB->size());
+		for(int j = 0; j < curveB->size(); j++)
+		{
+			ca[i][j] = -1;
+		}
+	}
+
+	curveB->reverse();
+
+	vector<Point> vec_curveA (curveA->begin(), curveA->end());
+	vector<Point> vec_curveB (curveB->begin(), curveB->end());
+
+	curveB->reverse();
+
+	return compute_coupling_distance(vec_curveA, vec_curveB, curveA->size() - 1, curveB->size() - 1, ca);
 }
 
 double hausdorff_measure(list<Point>* curveA, list<Point>* curveB)
@@ -410,9 +467,23 @@ int main(int argc, char* argv[])
 	normalise_point_position(edgeOut->points(), edgeOut->lastPoint());
 
 	display_edge_comparision(*edgeIn, *edgeOut, "Edge Comparision");
-	display_image_comparision(m_edge_in, m_edge_out, "Image Comparision");
+	//display_image_comparision(m_edge_in, m_edge_out, "Image Comparision");
 
-	cout << h_measure(edgeIn->points(), edgeOut->points()) << endl;
+	double coupling_dist = coupling_distance(edgeIn->points(), edgeOut->points());
+	double h_dist = h_measure(edgeIn->points(), edgeOut->points());
+
+	if (coupling_dist <= COUPLING_DISTANCE_THRESHOLD && h_dist <= H_DISTANCE_THRESHOLD)
+	{
+		cout << "MATCH" << endl;
+	}
+	else
+	{
+		cout << "Probably not match" << endl;
+	}
+
+	cout << coupling_dist << endl;
+	cout << h_dist << endl;
+	
 
 	waitKey();
 	return EXIT_SUCCESS;
