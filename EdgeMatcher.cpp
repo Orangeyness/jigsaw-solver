@@ -12,22 +12,10 @@
 
 #include "PieceData.h"
 #include "Edge.h"
+#include "GeometryHelpers.h"
 
 #define COUPLING_DISTANCE_THRESHOLD 35
 #define H_DISTANCE_THRESHOLD 12
-
-double euclid_distance(int x1, int y1, int x2, int y2) 
-{
-	double dist1 = (double)(x1 - x2);
-	double dist2 = (double)(y1 - y2);
-
-	return sqrt(dist1 * dist1 + dist2 * dist2);
-}
-
-double euclid_distance(Point p1, Point p2)
-{
-	return euclid_distance(p1.x, p1.y, p2.x, p2.y);
-}
 
 double compute_coupling_distance(vector<Point>& curveA, vector<Point>& curveB, int i, int j, vector<vector<double> >& ca)
 {
@@ -136,38 +124,6 @@ double h_measure(list<Point>* curveA, list<Point>* curveB)
 	return total_min_distances / curveA->size();
 }
 
-Point midpoint_of_line(Point a, Point b)
-{
-	int minx = min(a.x, b.x);
-	int miny = min(a.y, b.y);
-	int maxx = max(a.x, b.x);
-	int maxy = max(a.y, b.y);
-
-	return Point(minx + (maxx-minx)/2, miny + (maxy - miny)/2);
-}
-
-double interior_angle(Point middle_vertex, Point prev_vertex, Point next_vertex)
-{
-	int x_diff1 = middle_vertex.x - prev_vertex.x;
-	int x_diff2 = middle_vertex.x - next_vertex.x;
-	int y_diff1 = middle_vertex.y - prev_vertex.y;
-	int y_diff2 = middle_vertex.y - next_vertex.y;
-
-	double dot_product = x_diff1 * x_diff2 + y_diff1 * y_diff2;
-
-	double m1 = sqrt(x_diff1 * x_diff1 + y_diff1 * y_diff1);
-	double m2 = sqrt(x_diff2 * x_diff2 + y_diff2 * y_diff2);
-
-	double angle = acos((dot_product)/(m1 * m2));
-
-	return angle;
-}
-
-
-bool side_of_line(Point a, Point b, Point c)
-{
-     return ((b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)) > 0;
-}
 
 void overlayImage(const cv::Mat &background, const cv::Mat &foreground, cv::Mat &output, cv::Point2i location)
 {
@@ -186,7 +142,6 @@ void overlayImage(const cv::Mat &background, const cv::Mat &foreground, cv::Mat 
 		{
 			int fX = x - location.x; // because of the translation.
 			// we are done with this row if the column is outside of the foreground image.
-			if(fX >= foreground.cols) break;
 			// determine the opacity of the foregrond pixel, using its fourth (alpha) channel.
 			double opacity = 1;
 			// and now combine the background and foreground pixel, using the opacity, 
@@ -334,23 +289,15 @@ void normalise_point_rotation(list<Point>* point_list, double rotation)
 	}
 }
 
-void rotate_edge_around_origin(Edge* edge, Mat& rotated_img)
+void rotate_edge_around_origin(Edge* edge)
 {
 	Point piece_origin = edge->piece()->origin();
 	normalise_point_position(edge->points(), piece_origin);
-	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
 
+	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
 	Point desired_pos = Point(0, 100);
 
-	Point2f center = edge->piece()->origin();
-
 	double angle = interior_angle(Point(0, 0), midpoint, desired_pos);
-
-	Size rot_size = edge->piece()->image().size();
-
-	Mat rot_mat = getRotationMatrix2D(center, -TO_DEGREE(angle), 1.0);
-	rotated_img.create(rot_size, edge->piece()->image().type());
-	warpAffine(edge->piece()->image(), rotated_img, rot_mat, rot_size);
 
 	normalise_point_rotation(edge->points(), -angle);
 }
@@ -361,7 +308,7 @@ void flip_edge_around_midpoint(Edge* edge)
 	normalise_point_rotation(edge->points(), PI);
 }
 
-void rotate_edge_around_midpoint(Edge* edge, Mat& rotated_img)
+void rotate_edge_around_midpoint(Edge* edge)
 {
 	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
 	normalise_point_position(edge->points(), midpoint);
@@ -369,30 +316,17 @@ void rotate_edge_around_midpoint(Edge* edge, Mat& rotated_img)
 	Point normalised_first_point = edge->firstPoint();
 	normalised_first_point.y = 0;
 
-	Point normalised_last_point = edge->lastPoint();
-	normalised_last_point.y = 0;
-
 	double angle = interior_angle(Point(0, 0), normalised_first_point, edge->firstPoint());
 	normalise_point_rotation(edge->points(), angle);
 
 	//TODO: fix this when awake and understand angles
-	int rotate_direction = 1;
-
 	// check if line is now perpendicular to y axis
 	if (abs(TO_DEGREE(interior_angle(Point(0, 0), Point(0, 10), edge->lastPoint())) - 90) > 0.01 )
 	{
 		// if not we rotated in wrong direction?
 		// so rotate back twice as much
 		normalise_point_rotation(edge->points(), -angle*2);
-		rotate_direction = -1;
 	}
-
-	Size rot_size = edge->piece()->image().size();
-
-	Mat rot_mat = getRotationMatrix2D(midpoint, rotate_direction * TO_DEGREE(angle), 1.0);
-	rotated_img.create(rot_size, edge->piece()->image().type());
-	warpAffine(edge->piece()->image(), rotated_img, rot_mat, rot_size);
-
 }
 
 int main(int argc, char* argv[]) 
@@ -439,24 +373,22 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	Mat m_edge_out, m_edge_in;
-
 	edgeIn = (edge1.type() == EDGE_TYPE_IN ? &edge1 : &edge2);
 	edgeOut = (edge1.type() == EDGE_TYPE_OUT ? &edge1 : &edge2);
 
 	display_edge(*edgeIn, "Edge In", Scalar(0, 255, 0));
 	display_edge(*edgeOut, "Edge Out", Scalar(255, 0, 0));
 
-	rotate_edge_around_origin(edgeOut, m_edge_out);
-	rotate_edge_around_midpoint(edgeOut, m_edge_out);
+	rotate_edge_around_origin(edgeOut);
+	rotate_edge_around_midpoint(edgeOut);
 
 	if (edgeOut->firstPoint().x < edgeOut->lastPoint().x)
 	{
 		flip_edge_around_midpoint(edgeOut);
 	}
 
-	rotate_edge_around_origin(edgeIn, m_edge_in);
-	rotate_edge_around_midpoint(edgeIn, m_edge_in);
+	rotate_edge_around_origin(edgeIn);
+	rotate_edge_around_midpoint(edgeIn);
 
 	if (edgeIn->firstPoint().x > edgeIn->lastPoint().x)
 	{

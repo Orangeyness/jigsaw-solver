@@ -41,8 +41,6 @@ class PieceData {
 		PieceData(Mat* src_data, vector<Point> edge_data);
 		PieceData(string filename);
 
-		void fixRotation(double rotation);
-	
 		void setOrigin(Point origin);
 		void setCornerIndexs(vector<int> indexs);
 		void setEdgeType(int edge, int type);

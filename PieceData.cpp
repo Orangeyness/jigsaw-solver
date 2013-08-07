@@ -1,10 +1,11 @@
 #include "PieceData.h"
+#include "GeometryHelpers.h"
 
 #include <iostream>
 using namespace std;
 
 const string EDGE_DIR_NAMES[] = { "TEAL", "GREEN", "RED", "WHITE" };
-const string EDGE_TYPE_NAMES[] = { "FLAT", "IN", "OUT"};
+const string EDGE_TYPE_NAMES[] = { "FLAT", "IN  ", "OUT "};
 
 PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
@@ -17,9 +18,7 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4)
 	m_edgeData = edge_data;
 
 	//Find piece bounding rectangle
-	vector<Point> contour_poly;
-	approxPolyDP(Mat(m_edgeData), contour_poly, 3, true);
-	Rect bounding_rect = boundingRect(Mat(contour_poly));
+	Rect bounding_rect = contour_bounding_rect(m_edgeData);
 
 	//Create mask for piece
 	Mat mask = Mat::zeros(src_data->rows, src_data->cols, CV_8UC3);
@@ -46,19 +45,39 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4)
 
 }
 
+void resolve_filename(string name, string& image_filename, string& edge_filename)
+{
+	string ext = name.substr(name.size()-4, 4);
+
+	if (ext == string(".jpg"))
+	{
+		image_filename = name;
+		edge_filename = name.substr(0, name.size()-4) + string(".edg");
+	}
+	else if (ext == string(".edg"))
+	{
+		image_filename  = name.substr(0, name.size()-4) + string(".jpg");
+		edge_filename = name;
+	}
+	else
+	{
+		image_filename = name + string(".jpg");
+		edge_filename = name + string(".edg");
+	}
+}
+
 PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
-	stringstream image_filename;
-	stringstream edge_filename;
+	string image_filename;
+	string edge_filename;
 
-	image_filename << name << ".jpg";
-	edge_filename << name << ".edg";
+	resolve_filename(name, image_filename, edge_filename);
 
-	m_imageData = imread(image_filename.str());
+	m_imageData = imread(image_filename);
 	
 	if (!m_imageData.data) throw runtime_error("Failed to load piece image");
 
-	fstream fs (edge_filename.str().c_str(), fstream::in);
+	fstream fs (edge_filename.c_str(), fstream::in);
 
 	int point_count, x, y;
 	fs >> point_count;
@@ -95,15 +114,14 @@ PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType
 
 void PieceData::write(string name) 
 {
-	stringstream image_filename;
-	stringstream edge_filename;
+	string image_filename;
+	string edge_filename;
 
-	image_filename << name << ".jpg";
-	edge_filename << name << ".edg";
+	resolve_filename(name, image_filename, edge_filename);
+
+	imwrite(image_filename, m_imageData);
 	
-	imwrite(image_filename.str(), m_imageData);
-	
-	fstream fs (edge_filename.str().c_str(), fstream::out);
+	fstream fs (edge_filename.c_str(), fstream::out);
 
 	fs << m_edgeData.size() << endl;
 	for (int i = 0; i < m_edgeData.size(); i++) 
@@ -167,25 +185,6 @@ list<Point>* PieceData::getEdgePoints(int num)
 int PieceData::getEdgeType(int num)
 {
 	return m_edgeType[num];
-}
-
-// Doesn't work quite yet...
-void PieceData::fixRotation(double rotation)
-{
-	rotation = TO_RAD(rotation);
-
-	cout << rotation << endl;
-
-	int rotation_origin_x = m_edgeData[m_cornerIndexs[0]].x;
-	int rotation_origin_y = m_edgeData[m_cornerIndexs[0]].y;
-
-	for (int i = 0; i < m_edgeData.size(); i++) 
-	{
-		m_edgeData[i].x = rotation_origin_x + (m_edgeData[i].x - rotation_origin_x)*cos(rotation) - (m_edgeData[i].x - rotation_origin_x)*sin(rotation);
-		m_edgeData[i].y = rotation_origin_y + (m_edgeData[i].y - rotation_origin_y)*sin(rotation) + (m_edgeData[i].y - rotation_origin_y)*cos(rotation);
-	}
-
-	splitEdges();
 }
 
 void PieceData::splitEdges()

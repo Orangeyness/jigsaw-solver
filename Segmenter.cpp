@@ -2,6 +2,7 @@
 #include "opencv2/highgui/highgui.hpp"
 
 #include "PieceData.h"
+#include "GeometryHelpers.h"
 
 #include <sstream>
 #include <iostream>
@@ -31,95 +32,56 @@
 using namespace std;
 using namespace cv;
 
-void display(string window_name, Mat display_img, double scale)
-{
-	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
+//--- Forward declarations
+int segmenter(string filename, int output_offset, bool debug);
 
-	if (scale == 1)
-	{
-		imshow(window_name, display_img);
-		return ;
-	}
+int find_min_piece_area(vector< vector<Point> >& contours);
+vector<vector<Point> > filter_contours_by_area(vector< vector<Point> >& contours);
+vector<Point> smooth_contour(vector<Point>& contour);
+void display(string window_prefix, string window_name, Mat display_img, double scale);
+//---
 
-	Mat scaled_display_img;
-	resize(display_img, scaled_display_img, Size(display_img.cols * scale, display_img.rows * scale), 0, 0, INTER_LINEAR);
 
-	imshow(window_name, scaled_display_img);
-}
-
-int estimate_contour_area(vector<Point>& contour)
-{
-	vector<Point> contour_poly;
-	approxPolyDP(Mat(contour), contour_poly, 3, true);
-	Rect bounding_rect = boundingRect(Mat(contour_poly));
-	
-	return bounding_rect.area();
-}
-
-int find_min_piece_area(vector< vector<Point> >& contours)
-{
-	vector<int> contour_sizes (contours.size());
-	for (int i = 0; i < contours.size(); i++)
-	{
-		contour_sizes[i] = estimate_contour_area(contours[i]);
-	}
-
-	sort(contour_sizes.begin(), contour_sizes.end());
-
-	int prev_value = contour_sizes[0];
-	int min_value = prev_value;
-	int max_change = 0;
-	for (int i = 1; i < contour_sizes.size(); i++) 
-	{
-		int change = contour_sizes[i] - prev_value;
-
-		if (change > max_change)
-		{
-			max_change = change;
-			min_value = contour_sizes[i];
-		}
-
-		prev_value = contour_sizes[i];
-	}
-
-	return min_value;
-}
-
-vector< vector<Point> > filter_contours_by_area(vector< vector<Point> >& contours)
-{
-	vector< vector<Point> > filter_contours;
-	int min_area = find_min_piece_area(contours);
-
-	for (int i = 0; i < contours.size(); i++)
-	{
-		int area = estimate_contour_area(contours[i]);	
-
-		if (area >= min_area)
-		{
-			filter_contours.push_back(contours[i]);
-		}
-	}
-
-	return filter_contours;
-}
-
-vector<Point> smooth_contour(vector<Point>& contour)
-{
-	vector<Point> smoothed_contour; 
-
-	approxPolyDP(contour, smoothed_contour, SMOOTH_EPSILON, true);
-
-	return smoothed_contour;
-}
-
+// argv should contain list of filenames for images to segment
+// and optionally '-v' which will cause debug information to be
+// shown for all images which come after that argument
 int main(int argc, char* argv[])
 {
-	Mat src_image = imread(argv[1]);
+	bool debug = false;
+	int total_piece_count = 0;
+
+	for (int i = 1; i < argc; i++)
+	{
+		if (strcmp(argv[i], "-v") == 0)
+		{
+			debug = true;
+			continue;
+		}
+
+		int found_pieces = segmenter(string(argv[i]), total_piece_count, debug);
+
+		if (found_pieces < 0)
+		{
+			cout << "Error on file '" << argv[i] << "'. Could not read file." << endl;
+			return EXIT_FAILURE;
+		}
+
+		cout << "File '"<< argv[i] << "' - piece count: " << found_pieces << endl;
+		total_piece_count += found_pieces;
+	}
+
+	waitKey();
+
+	return EXIT_SUCCESS;
+}
+
+// The segmenter
+int segmenter(string filename, int output_offset, bool debug)
+{
+	Mat src_image = imread(filename);
 	Mat src_resized;
-	bool debug = (argc >= 3 && strcmp(argv[2], "-v") == 0);
 
-	if (!src_image.data) { return EXIT_FAILURE; }
-
+	if (!src_image.data) { return -1; }
 
 	resize(src_image, src_resized, Size(src_image.cols/RESIZE_DIVIDER, src_image.rows/RESIZE_DIVIDER), 0, 0, INTER_LINEAR);
 
@@ -150,7 +112,7 @@ int main(int argc, char* argv[])
 	Mat final_morph_element = getStructuringElement(MORPH_FINAL_ELEM, Size(2*MORPH_FINAL_SIZE+1, 2*MORPH_FINAL_SIZE+1), Point(MORPH_FINAL_SIZE, MORPH_FINAL_SIZE));
 	morphologyEx(edge_map, edge_map, MORPH_FINAL_OP, final_morph_element);
 
-	if (debug) display("Edge Map", edge_map, 0.3);
+	if (debug) display(filename, "Edge Map", edge_map, 0.3);
 
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
@@ -178,23 +140,102 @@ int main(int argc, char* argv[])
 		}
 
 		bitwise_and(mask, src_image, output);
-		display("Output", output, 0.3);
-		display("Contour Map", contour_img, 0.3);
-		display("Mask", mask, 0.3);
-		imwrite("output.png", contour_img);
-		
+		display(filename, "Output", output, 0.3);
+		display(filename, "Contour Map", contour_img, 0.3);
+		display(filename, "Mask", mask, 0.3);
 	}
 
 	for(int i = 0; i < contours.size(); i++)
 	{
 		stringstream output_name;
-		output_name << OUTPUT_FOLDER << i;
+		output_name << OUTPUT_FOLDER << (output_offset + i);
 
 		PieceData piece (&src_image, contours[i]);
 		piece.write(output_name.str());
 	}
 
-	waitKey();
 
-	return EXIT_SUCCESS;
+	return contours.size();
+}
+
+// Attempts to filter false positives out of the contour list. 
+// False positives contours tend to be small parts of the background
+// so this filters based on the area of the contours.
+vector< vector<Point> > filter_contours_by_area(vector< vector<Point> >& contours)
+{
+	vector< vector<Point> > filter_contours;
+	int min_area = find_min_piece_area(contours);
+
+	for (int i = 0; i < contours.size(); i++)
+	{
+		int area = estimate_contour_area(contours[i]);	
+
+		if (area >= min_area)
+		{
+			filter_contours.push_back(contours[i]);
+		}
+	}
+
+	return filter_contours;
+}
+
+// Looks at contours and attempts to find the area of the smallest
+// puzzle piece by ordering all the contours and finding the biggest
+// difference between contours adjacent in the ordered array.
+int find_min_piece_area(vector< vector<Point> >& contours)
+{
+	vector<int> contour_sizes (contours.size());
+	for (int i = 0; i < contours.size(); i++)
+	{
+		contour_sizes[i] = estimate_contour_area(contours[i]);
+	}
+
+	sort(contour_sizes.begin(), contour_sizes.end());
+
+	int prev_value = contour_sizes[0];
+	int min_value = prev_value;
+	int max_change = 0;
+	for (int i = 1; i < contour_sizes.size(); i++) 
+	{
+		int change = contour_sizes[i] - prev_value;
+
+		if (change > max_change)
+		{
+			max_change = change;
+			min_value = contour_sizes[i];
+		}
+
+		prev_value = contour_sizes[i];
+	}
+
+	return min_value;
+}
+
+// Smooths the contour area using a constant epsilon value.
+vector<Point> smooth_contour(vector<Point>& contour)
+{
+	vector<Point> smoothed_contour; 
+
+	approxPolyDP(contour, smoothed_contour, SMOOTH_EPSILON, true);
+
+	return smoothed_contour;
+}
+
+
+void display(string window_prefix, string window_name, Mat display_img, double scale)
+{
+	string prefixed_window_name = window_prefix + window_name;
+		
+	namedWindow(prefixed_window_name, CV_WINDOW_AUTOSIZE);
+
+	if (scale == 1)
+	{
+		imshow(prefixed_window_name, display_img);
+		return ;
+	}
+
+	Mat scaled_display_img;
+	resize(display_img, scaled_display_img, Size(display_img.cols * scale, display_img.rows * scale), 0, 0, INTER_LINEAR);
+
+	imshow(prefixed_window_name, scaled_display_img);
 }
