@@ -15,7 +15,7 @@
 #define CANNY_RATIO 3
 #define CANNY_THRESHOLD_R 250
 #define CANNY_THRESHOLD_G 250
-#define CANNY_THRESHOLD_B 550
+#define CANNY_THRESHOLD_B 275
 
 #define MORPH_CHANNEL_ELEM MORPH_RECT
 #define MORPH_CHANNEL_SIZE 1
@@ -25,7 +25,7 @@
 #define MORPH_FINAL_SIZE 2
 #define MORPH_FINAL_OP 3
 
-#define SMOOTH_EPSILON 2
+#define SMOOTH_EPSILON 1
 
 #define OUTPUT_FOLDER "output/"
 
@@ -143,6 +143,7 @@ int segmenter(string filename, int output_offset, bool debug)
 		display(filename, "Output", output, 0.3);
 		display(filename, "Contour Map", contour_img, 0.3);
 		display(filename, "Mask", mask, 0.3);
+		imwrite("output.png", output);
 	}
 
 	for(int i = 0; i < contours.size(); i++)
@@ -195,7 +196,7 @@ int find_min_piece_area(vector< vector<Point> >& contours)
 	int prev_value = contour_sizes[0];
 	int min_value = prev_value;
 	int max_change = 0;
-	for (int i = 1; i < contour_sizes.size(); i++) 
+	for (int i = 1; i < contour_sizes.size() - 4; i++) 
 	{
 		int change = contour_sizes[i] - prev_value;
 
@@ -215,10 +216,20 @@ int find_min_piece_area(vector< vector<Point> >& contours)
 vector<Point> smooth_contour(vector<Point>& contour)
 {
 	vector<Point> smoothed_contour; 
+	vector<Point> final_smooth;
 
 	approxPolyDP(contour, smoothed_contour, SMOOTH_EPSILON, true);
 
-	return smoothed_contour;
+	Mat contour_mat (smoothed_contour);
+	Mat result;
+
+	int k = 3;
+
+	//GaussianBlur(contour_mat, result, 
+	cv::blur(contour_mat, result, cv::Size(1, k),cv::Point(-1,-1));
+    result.rowRange(cv::Range(0,result.rows)).copyTo(final_smooth);
+
+	return final_smooth;
 }
 
 

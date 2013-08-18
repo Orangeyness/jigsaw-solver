@@ -410,7 +410,7 @@ int main(int argc, char* argv[])
 		flip_edge_around_midpoint(edgeOut, edge_out_image);
 	}
 
-	rotate_edge_around_origin(edgeIn, edge_in_image);
+	//rotate_edge_around_origin(edgeIn, edge_in_image);
 	rotate_edge_around_midpoint(edgeIn, edge_in_image);
 
 	if (edgeIn->firstPoint().x > edgeIn->lastPoint().x)
@@ -424,8 +424,8 @@ int main(int argc, char* argv[])
 	display_edge_comparision(*edgeIn, *edgeOut, "Edge Comparision");
 	//display_image_comparision(edge_in_image, edge_out_image, "Image Comparision");
 
-	display_image(edge_in_image, "Image - Edge In");
-	display_image(edge_out_image, "Image - Edge Out");
+	//display_image(edge_in_image, "Image - Edge In");
+	//display_image(edge_out_image, "Image - Edge Out");
 
 	double coupling_dist = coupling_distance(edgeIn->points(), edgeOut->points());
 	double h_dist = h_measure(edgeIn->points(), edgeOut->points());

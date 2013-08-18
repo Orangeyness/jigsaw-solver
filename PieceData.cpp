@@ -4,7 +4,7 @@
 #include <iostream>
 using namespace std;
 
-const string EDGE_DIR_NAMES[] = { "TEAL", "GREEN", "RED", "WHITE" };
+const string EDGE_DIR_NAMES[] = { "TOP", "LEFT", "BOT", "RIGHT" };
 const string EDGE_TYPE_NAMES[] = { "FLAT", "IN  ", "OUT "};
 
 PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
@@ -27,10 +27,6 @@ PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4)
 	contours.push_back(m_edgeData);
 
 	drawContours(mask, contours, 0, Scalar(255, 255, 255), -1);
-	
-	Point center = Point(	bounding_rect.x + bounding_rect.width/2,
-				bounding_rect.y + bounding_rect.height/2
-				);
 	
 	//Copy and crop the piece
 	bitwise_and(mask, *src_data, m_imageData);
@@ -142,6 +138,14 @@ void PieceData::write(string name)
 void PieceData::setOrigin(Point origin)
 {
 	m_origin = origin;
+
+	vector<Point>::iterator it;
+
+	for (it = m_edgeData.begin(); it != m_edgeData.end(); it++)
+	{
+		(*it).x = (*it).x - m_origin.x;
+		(*it).y = (*it).y - m_origin.y;
+	}
 }
 
 void PieceData::setCornerIndexs(vector<int> indexs)
@@ -170,6 +174,15 @@ Point PieceData::origin()
 {
 	return m_origin;
 }
+/*
+Point PieceData:cornerTopLeft()
+{
+	
+	for(int i = 0; i < EDGE_COUNT; i++)
+	{
+		
+	}
+}*/
 
 int PieceData::getCornerIndex(int num)
 {
@@ -195,31 +208,69 @@ void PieceData::splitEdges()
 	}
 
 	int edge_index = 0;
-	bool insert_end = true;
-	list<Point>::iterator it;
-	for (int i = 0; i < m_edgeData.size(); i++) 
+	int next_edge_index = (edge_index + 1) % EDGE_COUNT;
+	int point_index = m_cornerIndexs[0];
+
+	while(edge_index < EDGE_COUNT)
 	{
-		if (insert_end)
-		{
-			m_edgeList[edge_index].push_back(m_edgeData[i]);
-		}
-		else
-		{
-			m_edgeList[edge_index].insert(it, m_edgeData[i]);
-		}
-
-
-		if (i == m_cornerIndexs[edge_index])
-		{
-			edge_index = (edge_index + 1) % 4;
-			if (edge_index == 0)
-			{
-				insert_end = false;
-				it = m_edgeList[edge_index].begin();
-			}
-
-			i--;
-		}
-	}
 	
+		m_edgeList[edge_index].push_back(m_edgeData[point_index]);
+		
+		if (point_index == m_cornerIndexs[next_edge_index])
+		{
+			edge_index ++;
+			next_edge_index = (edge_index + 1) % EDGE_COUNT;
+			
+			if (edge_index == EDGE_COUNT)
+			{
+				m_edgeList[0].insert(m_edgeList[0].begin(), m_edgeData[point_index]);
+			}
+			else
+			{
+				m_edgeList[edge_index].push_back(m_edgeData[point_index]);
+			}
+		}
+
+		point_index = (point_index + 1) % m_edgeData.size();
+	}
+}
+
+void PieceData::rotate(double rotation)
+{
+	vector<Point>::iterator it;
+
+	double cos_r = cos(rotation);
+	double sin_r = sin(rotation);
+
+	for (it = m_edgeData.begin(); it != m_edgeData.end(); it++)
+	{
+		double xx = (*it).x;
+		double yy = (*it).y;
+		
+		(*it).x = (int)(xx * cos_r - yy * sin_r);
+		//(*it).x * cos(rotation) - (*it).y * sin(rotation);
+		(*it).y = (int)(xx * sin_r + yy * cos_r);
+		//(*it).x * sin(rotation) + (*it).y * cos(rotation);
+	}
+
+	Size orig_size = m_imageData.size();
+	Mat target (Size(orig_size.width + 100, orig_size.height + 100), m_imageData.type());
+	Rect roi (50, 50, orig_size.width, orig_size.height);
+	
+	cout << roi << endl;
+
+	m_imageData.copyTo(target(roi));
+	m_origin = m_origin + Point(50, 50);
+
+
+	Mat rotated_img;
+	rotated_img.create(target.size(), target.type());
+
+	Mat rot_mat = getRotationMatrix2D(m_origin, TO_DEGREE(-rotation), 1.0);
+	warpAffine(target, rotated_img, rot_mat, target.size());
+
+	Rect bounding_rect = contour_bounding_rect(m_edgeData) + m_origin;
+
+	m_imageData = rotated_img(bounding_rect);
+	m_origin = m_origin - Point(bounding_rect.x, bounding_rect.y);
 }

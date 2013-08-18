@@ -45,6 +45,8 @@ class PieceData {
 		void setCornerIndexs(vector<int> indexs);
 		void setEdgeType(int edge, int type);
 
+		void rotate(double rotation);
+
 		void write(string filename);
 	
 		Mat image();
