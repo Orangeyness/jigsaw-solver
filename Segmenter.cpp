@@ -13,19 +13,25 @@
 
 #define BLUR_KERNEL_SIZE 5
 #define CANNY_RATIO 3
-#define CANNY_THRESHOLD_R 250
-#define CANNY_THRESHOLD_G 250
-#define CANNY_THRESHOLD_B 275
+#define CANNY_THRESHOLD_R 200
+#define CANNY_THRESHOLD_G 200
+#define CANNY_THRESHOLD_B 225
 
-#define MORPH_CHANNEL_ELEM MORPH_RECT
-#define MORPH_CHANNEL_SIZE 1
-#define MORPH_CHANNEL_OP 4
+//#define MORPH_CHANNEL
+#define MORPH_CHANNEL_ELEM MORPH_ELLIPSE
+#define MORPH_CHANNEL_SIZE 2
+#define MORPH_CHANNEL_OP MORPH_CLOSE
 
-#define MORPH_FINAL_ELEM MORPH_ELLIPSE
-#define MORPH_FINAL_SIZE 2
-#define MORPH_FINAL_OP 3
+#define MORPH_CLOSE_ELEM MORPH_ELLIPSE
+#define MORPH_CLOSE_SIZE 5
 
+#define MORPH_OPEN_ELEM MORPH_ELLIPSE
+#define MORPH_OPEN_SIZE 10
+
+#define SMOOTH_BLUR 0
 #define SMOOTH_EPSILON 1
+
+#define FILTER_CHANGE_PERCENT 15
 
 #define OUTPUT_FOLDER "output/"
 
@@ -93,14 +99,18 @@ int segmenter(string filename, int output_offset, bool debug)
 	thresholds[1] = CANNY_THRESHOLD_G;
 	thresholds[2] = CANNY_THRESHOLD_R;
 
+#ifdef MORPH_CHANNEL
 	Mat channel_morph_element = getStructuringElement(MORPH_CHANNEL_ELEM, Size(2*MORPH_CHANNEL_SIZE+1, 2*MORPH_CHANNEL_SIZE+1), Point(MORPH_CHANNEL_SIZE, MORPH_CHANNEL_SIZE));
+#endif
 
 	for(int i = 0; i < 3; i++)
 	{
 		blur(channels[i], channels[i], Size(BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE));
 		Canny(channels[i], channels[i], thresholds[i], thresholds[i]*CANNY_RATIO, BLUR_KERNEL_SIZE);
 
+#ifdef MORPH_CHANNEL
 		morphologyEx(channels[i], channels[i], MORPH_CHANNEL_OP, channel_morph_element);
+#endif
 	}
 
 	Mat edge_map;
@@ -109,8 +119,9 @@ int segmenter(string filename, int output_offset, bool debug)
 	bitwise_or(channels[0], channels[1], edge_map);
 	bitwise_or(channels[2], edge_map, edge_map);
 
-	Mat final_morph_element = getStructuringElement(MORPH_FINAL_ELEM, Size(2*MORPH_FINAL_SIZE+1, 2*MORPH_FINAL_SIZE+1), Point(MORPH_FINAL_SIZE, MORPH_FINAL_SIZE));
-	morphologyEx(edge_map, edge_map, MORPH_FINAL_OP, final_morph_element);
+	Mat close_morph_element = getStructuringElement(MORPH_CLOSE_ELEM, Size(2*MORPH_CLOSE_SIZE+1, 2*MORPH_CLOSE_SIZE+1), Point(MORPH_CLOSE_SIZE, MORPH_CLOSE_SIZE));
+	morphologyEx(edge_map, edge_map, MORPH_CLOSE, close_morph_element);
+
 
 	if (debug) display(filename, "Edge Map", edge_map, 0.3);
 
@@ -122,28 +133,36 @@ int segmenter(string filename, int output_offset, bool debug)
 
 	contours = filter_contours_by_area(contours);
 
+	Mat mask = Mat::zeros(src_image.rows, src_image.cols, CV_8UC1);
 	for (int i = 0; i < contours.size(); i++) 
 	{
-		contours[i] = smooth_contour(contours[i]);
+		drawContours(mask, contours, i, Scalar(255, 255, 255), -1);
 	}
+
+	Mat open_morph_element = getStructuringElement(MORPH_OPEN_ELEM, Size(2*MORPH_OPEN_SIZE+1, 2*MORPH_OPEN_SIZE+1), Point(MORPH_OPEN_SIZE, MORPH_OPEN_SIZE));
+	morphologyEx(mask, mask, MORPH_OPEN, open_morph_element);
+	
+	findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS, Point(0, 0));
+
+	contours = filter_contours_by_area(contours);
 
 	if (debug)
 	{
+		Mat display_mask = Mat::zeros(src_image.rows, src_image.cols, CV_8UC3);
 		Mat contour_img = src_image.clone();
-		Mat mask = Mat::zeros(src_image.rows, src_image.cols, CV_8UC3);
 		Mat output = src_image.clone();
 
 		for (int i = 0; i < contours.size(); i++) 
 		{
 			drawContours(contour_img, contours, i, Scalar(0, 0, 255));
-			drawContours(mask, contours, i, Scalar(255, 255, 255), -1);
+			drawContours(display_mask, contours, i, Scalar(255, 255, 255), -1);
 		}
 
-		bitwise_and(mask, src_image, output);
+		bitwise_and(display_mask, src_image, output);
 		display(filename, "Output", output, 0.3);
 		display(filename, "Contour Map", contour_img, 0.3);
-		display(filename, "Mask", mask, 0.3);
-		imwrite("output.png", output);
+		display(filename, "Mask", display_mask, 0.3);
+		imwrite("output.png", display_mask);
 	}
 
 	for(int i = 0; i < contours.size(); i++)
@@ -194,8 +213,8 @@ int find_min_piece_area(vector< vector<Point> >& contours)
 	sort(contour_sizes.begin(), contour_sizes.end());
 
 	int prev_value = contour_sizes[0];
-	int min_value = prev_value;
-	int max_change = 0;
+	int min_value_index = 0;
+	int max_change = -1;
 	for (int i = 1; i < contour_sizes.size() - 4; i++) 
 	{
 		int change = contour_sizes[i] - prev_value;
@@ -203,33 +222,41 @@ int find_min_piece_area(vector< vector<Point> >& contours)
 		if (change > max_change)
 		{
 			max_change = change;
-			min_value = contour_sizes[i];
+			min_value_index;
 		}
 
 		prev_value = contour_sizes[i];
 	}
 
-	return min_value;
+	if (min_value_index == 0 || max_change < contour_sizes[min_value_index-1] / FILTER_CHANGE_PERCENT)
+	{
+		return contour_sizes[0];
+	} 
+
+	return contour_sizes[min_value_index];
 }
 
 // Smooths the contour area using a constant epsilon value.
 vector<Point> smooth_contour(vector<Point>& contour)
 {
 	vector<Point> smoothed_contour; 
-	vector<Point> final_smooth;
 
 	approxPolyDP(contour, smoothed_contour, SMOOTH_EPSILON, true);
 
-	Mat contour_mat (smoothed_contour);
-	Mat result;
+	if (SMOOTH_BLUR > 0)
+	{
+		vector<Point> final_smooth;
+		Mat contour_mat (smoothed_contour);
+		Mat result;
 
-	int k = 3;
+		//GaussianBlur(contour_mat, result, 
+		cv::blur(contour_mat, result, cv::Size(1, SMOOTH_BLUR),cv::Point(-1,-1));
+		result.rowRange(cv::Range(0,result.rows)).copyTo(final_smooth);
+		
+		return final_smooth;
+	}
 
-	//GaussianBlur(contour_mat, result, 
-	cv::blur(contour_mat, result, cv::Size(1, k),cv::Point(-1,-1));
-    result.rowRange(cv::Range(0,result.rows)).copyTo(final_smooth);
-
-	return final_smooth;
+	return smoothed_contour;
 }
 
 

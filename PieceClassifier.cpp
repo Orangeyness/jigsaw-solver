@@ -17,13 +17,16 @@
 #define EDGE_BIAS_THRESHOLD 5 
 
 #define EDGE_SIMPLIFY_AMOUNT 15
-#define RIGHT_ANGLE_DIFF 8
+#define RIGHT_ANGLE_DIFF 10.0
 #define RIGHT_ANGLE_MIN 90 - RIGHT_ANGLE_DIFF
 #define RIGHT_ANGLE_MAX 90 + RIGHT_ANGLE_DIFF
+#define NOT_RIGHT_ANGLE(x) (x < RIGHT_ANGLE_MIN || x > RIGHT_ANGLE_MAX)
+#define NOT_NEARLY_RIGHT_ANGLE(x) (x < RIGHT_ANGLE_MIN - RIGHT_ANGLE_DIFF*2.5 || x > RIGHT_ANGLE_MAX + RIGHT_ANGLE_DIFF*2.5)
+//#define NOT_NEARLY_RIGHT_ANGLE(x) false
 
 //--- Forward declarations
 Point origin_point(vector<Point>& edge);
-vector<Point> find_corner_points(vector<Point>& smoothed_edge);
+vector<Point> find_corner_points(vector<Point>& smoothed_edge, Size area);
 vector<int> find_corner_indexs(vector<Point>& edge, vector<Point>& corner_points);
 int classify_edge(list<Point>* edge);
 int piece_classifier(string piece_filename, bool debug);
@@ -54,7 +57,6 @@ int main(int argc, char* argv[])
 		if (success == EXIT_FAILURE) 
 		{
 			cout << "Error on piece '" << argv[i] << "'. Does not appear to be valid piece." << endl;
-			return EXIT_FAILURE;
 		}
 
 	}
@@ -74,7 +76,7 @@ int piece_classifier(string piece_filename, bool debug)
 
 	approxPolyDP(edge, smoothed_edge, EDGE_SIMPLIFY_AMOUNT, true);
 
-	vector<Point> corner_points = find_corner_points(smoothed_edge);
+	vector<Point> corner_points = find_corner_points(smoothed_edge, pd.image().size());
 	pd.setOrigin(origin_point(corner_points));
 
 	if (corner_points.size() == 0)
@@ -84,14 +86,11 @@ int piece_classifier(string piece_filename, bool debug)
 
 	vector<int> corner_indexs = find_corner_indexs(edge, corner_points);
 	
-	Point top_right = edge[corner_indexs[0]];
+	/*Point top_right = edge[corner_indexs[0]];
 	Point top_left = edge[corner_indexs[1]];
 	
-	cout << top_left << top_right << endl;
-
 	double angle = atan2(top_right.y - top_left.y, top_right.x - top_left.x);
-	cout << TO_DEGREE(angle) << endl;
-	pd.rotate(-angle);
+	pd.rotate(-angle);*/
 	/*
 	double cos_r = cos(angle);
 	double sin_r = sin(angle);
@@ -190,10 +189,12 @@ int classify_edge(list<Point>* edge)
 
 // Attempts to find the corner points of the piece contour by finding the four points
 // which create the (roughly) rectanglaur quadralateral with the largest area.
-vector<Point> find_corner_points(vector<Point>& smoothed_edge)
+vector<Point> find_corner_points(vector<Point>& smoothed_edge, Size area_size)
 {
 	double greatest_area = 0;
 	vector<Point> corner_points (4);
+
+	Point estimated_origin (area_size.width / 2, area_size.height / 2);
 
 	for (int i = 0; i < smoothed_edge.size(); i++) 
 	{
@@ -202,24 +203,37 @@ vector<Point> find_corner_points(vector<Point>& smoothed_edge)
 		{
 			if (j == i) continue;
 
+			angle = interior_angle_d(estimated_origin, smoothed_edge[i], smoothed_edge[j]);
+			if (NOT_NEARLY_RIGHT_ANGLE(angle)) continue;
+
 			for (int k = 0; k < smoothed_edge.size(); k++) 
 			{
 				if (k == j || k == i) continue;
 				
 				angle = interior_angle_d(smoothed_edge[i], smoothed_edge[j], smoothed_edge[k]);
-				if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+				if (NOT_RIGHT_ANGLE(angle)) continue;
+
+				angle = interior_angle_d(estimated_origin, smoothed_edge[i], smoothed_edge[k]);
+				if (NOT_NEARLY_RIGHT_ANGLE(angle)) continue;
 
 				for (int l = 0; l < smoothed_edge.size(); l++) 
 				{
 					if (l == k || l == j || l == i) continue;
 
 					angle = interior_angle_d(smoothed_edge[k], smoothed_edge[i], smoothed_edge[l]);
-					if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+					if (NOT_RIGHT_ANGLE(angle)) continue;
 					
 					angle = interior_angle_d(smoothed_edge[l], smoothed_edge[k], smoothed_edge[j]);
-					if (angle < RIGHT_ANGLE_MIN || angle > RIGHT_ANGLE_MAX) continue;
+					if (NOT_RIGHT_ANGLE(angle)) continue;
 
+					angle = interior_angle_d(estimated_origin, smoothed_edge[k], smoothed_edge[l]);
+					if (NOT_NEARLY_RIGHT_ANGLE(angle)) continue;
+
+					angle = interior_angle_d(estimated_origin, smoothed_edge[j], smoothed_edge[l]);
+					if (NOT_NEARLY_RIGHT_ANGLE(angle)) continue;
+					
 					double area = area_of_rectangle(smoothed_edge[l], smoothed_edge[k], smoothed_edge[j]);
+					//TODO: use area of intersection
 					if (area > greatest_area) 
 					{
 						greatest_area = area;
@@ -227,6 +241,7 @@ vector<Point> find_corner_points(vector<Point>& smoothed_edge)
 						corner_points[1] = smoothed_edge[j];
 						corner_points[2] = smoothed_edge[k];
 						corner_points[3] = smoothed_edge[l];
+
 					}
 				}
 			}
@@ -237,6 +252,20 @@ vector<Point> find_corner_points(vector<Point>& smoothed_edge)
 	{
 		corner_points.clear();
 	}
+
+	/*
+	cout << corner_points[0] << corner_points[1] << corner_points[2] << corner_points[3] << endl;
+
+	double angle;
+	angle = interior_angle_d(estimated_origin, corner_points[0], corner_points[1]);
+	cout << "i-j " << angle << endl;
+	angle = interior_angle_d(estimated_origin, corner_points[0], corner_points[2]);
+	cout << "i-k " << angle << endl;
+	angle = interior_angle_d(estimated_origin, corner_points[2], corner_points[3]);
+	cout << "k-l " << angle << endl;
+	angle = interior_angle_d(estimated_origin, corner_points[1], corner_points[3]);
+	cout << "j-l " << angle << endl;
+	*/
 
 	return corner_points;
 }
@@ -367,7 +396,10 @@ void display(PieceData &piece, string window_name)
 	drawLineList(display_img, piece.getEdgePoints(2), piece.origin(), Scalar(0, 0, 255), 2);
 	drawLineList(display_img, piece.getEdgePoints(3), piece.origin(), Scalar(255, 255, 210), 2);
 
+	Point test_origin (raw_img.cols / 2, raw_img.rows / 2);
+
 	circle(display_img, piece.origin(), 5, Scalar(0, 255, 0), -1);
+	circle(display_img, test_origin, 5, Scalar(255, 0, 0), -1);
 
 	for (int i = 0; i < EDGE_COUNT; i++) 
 	{

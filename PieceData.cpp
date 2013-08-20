@@ -13,6 +13,8 @@ PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4
 	m_edgeData = edge_data;
 }
 
+
+// Just realised how memory bad this is. TODO: Move masking shit back out of here or something.
 PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
 {
 	m_edgeData = edge_data;
@@ -235,6 +237,8 @@ void PieceData::splitEdges()
 	}
 }
 
+#define ROTATION_PADDING 80
+#define ROTATION_PADDING_OFFSET Point(ROTATION_PADDING, ROTATION_PADDING)
 void PieceData::rotate(double rotation)
 {
 	vector<Point>::iterator it;
@@ -254,14 +258,11 @@ void PieceData::rotate(double rotation)
 	}
 
 	Size orig_size = m_imageData.size();
-	Mat target (Size(orig_size.width + 100, orig_size.height + 100), m_imageData.type());
-	Rect roi (50, 50, orig_size.width, orig_size.height);
+	Mat target = Mat::zeros(Size(orig_size.width + ROTATION_PADDING*2, orig_size.height + ROTATION_PADDING*2), m_imageData.type());
+	Rect roi (ROTATION_PADDING, ROTATION_PADDING, orig_size.width, orig_size.height);
 	
-	cout << roi << endl;
-
 	m_imageData.copyTo(target(roi));
-	m_origin = m_origin + Point(50, 50);
-
+	m_origin = m_origin + ROTATION_PADDING_OFFSET;
 
 	Mat rotated_img;
 	rotated_img.create(target.size(), target.type());
@@ -270,7 +271,6 @@ void PieceData::rotate(double rotation)
 	warpAffine(target, rotated_img, rot_mat, target.size());
 
 	Rect bounding_rect = contour_bounding_rect(m_edgeData) + m_origin;
-
 	m_imageData = rotated_img(bounding_rect);
 	m_origin = m_origin - Point(bounding_rect.x, bounding_rect.y);
 }
