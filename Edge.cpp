@@ -6,21 +6,14 @@ Edge::Edge(string filename, int edge) : pd (filename)
 	edge_index = edge;
 }
 
-list<Point>* Edge::points()
+Point Edge::getFirstCorner()
 {
-	return pd.getEdgePoints(edge_index);
+	return *(pd.getEdgeBegin(edge_index));
 }
 
-Point Edge::firstPoint()
+Point Edge::getSecondCorner()
 {
-	list<Point>* p = points();
-	return p->front();
-}
-
-Point Edge::lastPoint()
-{
-	list<Point>* p = points();
-	return p->back();
+	return *(pd.getEdgeEnd(edge_index) - 1);
 }
 
 int Edge::index()

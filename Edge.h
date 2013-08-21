@@ -13,9 +13,8 @@ class Edge
 
 	public:
 		Edge(string filename, int edge);
-		list<Point>* points();
-		Point firstPoint();
-		Point lastPoint();
+		Point getFirstCorner();
+		Point getSecondCorner();
 		int index();
 		int type();
 		PieceData* piece();

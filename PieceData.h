@@ -19,22 +19,32 @@
 #define EDGE_TYPE_IN 1
 #define EDGE_TYPE_OUT 2
 
+#define EDGE_TOP 0
+#define EDGE_LEFT 1
+#define EDGE_BOT 2
+#define EDGE_RIGHT 3
+
+#define CORNER_TOPRIGHT 0
+#define CORNER_TOPLEFT 1
+#define CORNER_BOTLEFT 2
+#define CORNER_BOTRIGHT 3
+
 using namespace cv;
 using namespace std;
 
 extern const string EDGE_DIR_NAMES[4];
 extern const string EDGE_TYPE_NAMES[3];
 
+typedef vector<Point>::iterator ptIter;
+
 class PieceData {
 	private:
 		Mat m_imageData;
 		vector<Point> m_edgeData;
-		vector< list<Point> > m_edgeList;
 		vector<int> m_cornerIndexs;
 		vector<int> m_edgeType;
 		Point m_origin;
 
-		void splitEdges();
 
 	public:
 		PieceData(Mat image_data, vector<Point> edge_data);
@@ -53,7 +63,17 @@ class PieceData {
 		vector<Point> edge();
 		Point origin();
 		int getCornerIndex(int num);
-		list<Point>* getEdgePoints(int num);
+
+		Point getTopLeftCorner();
+		Point getTopRightCorner();
+		Point getBotLeftCorner();
+		Point getBotRightCorner();
+
+		ptIter begin();
+		ptIter end();
+		ptIter getEdgeBegin(int num);
+		ptIter getEdgeEnd(int num);
+		
 		int getEdgeType(int num);
 	};
 

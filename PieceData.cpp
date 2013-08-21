@@ -7,7 +7,7 @@ using namespace std;
 const string EDGE_DIR_NAMES[] = { "TOP", "LEFT", "BOT", "RIGHT" };
 const string EDGE_TYPE_NAMES[] = { "FLAT", "IN  ", "OUT "};
 
-PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
+PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeType(4)
 {
 	m_imageData = image_data;
 	m_edgeData = edge_data;
@@ -15,7 +15,7 @@ PieceData::PieceData(Mat image_data, vector<Point> edge_data) : m_cornerIndexs(4
 
 
 // Just realised how memory bad this is. TODO: Move masking shit back out of here or something.
-PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
+PieceData::PieceData(Mat* src_data, vector<Point> edge_data) : m_cornerIndexs(4), m_edgeType(4)
 {
 	m_edgeData = edge_data;
 
@@ -64,7 +64,7 @@ void resolve_filename(string name, string& image_filename, string& edge_filename
 	}
 }
 
-PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType(4)
+PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeType(4)
 {
 	string image_filename;
 	string edge_filename;
@@ -104,9 +104,6 @@ PieceData::PieceData(string name) : m_cornerIndexs(4), m_edgeList(4), m_edgeType
 		
 		if (x != 0) non_zero = true;
 	}
-
-	if (non_zero) splitEdges();
-
 }
 
 
@@ -153,8 +150,6 @@ void PieceData::setOrigin(Point origin)
 void PieceData::setCornerIndexs(vector<int> indexs)
 {
 	m_cornerIndexs = indexs;
-	
-	splitEdges();
 }
 
 void PieceData::setEdgeType(int edge, int type)
@@ -176,68 +171,62 @@ Point PieceData::origin()
 {
 	return m_origin;
 }
-/*
-Point PieceData:cornerTopLeft()
-{
-	
-	for(int i = 0; i < EDGE_COUNT; i++)
-	{
-		
-	}
-}*/
 
 int PieceData::getCornerIndex(int num)
 {
 	return m_cornerIndexs[num];
 }
 
-
-list<Point>* PieceData::getEdgePoints(int num)
+Point PieceData::getTopRightCorner()
 {
-	return &m_edgeList[num];
+	return m_edgeData[m_cornerIndexs[CORNER_TOPRIGHT]];
+}
+Point PieceData::getTopLeftCorner()
+{
+	return m_edgeData[m_cornerIndexs[CORNER_TOPLEFT]];
+}
+Point PieceData::getBotLeftCorner()
+{
+	return m_edgeData[m_cornerIndexs[CORNER_BOTLEFT]];
+}
+Point PieceData::getBotRightCorner()
+{
+	return m_edgeData[m_cornerIndexs[CORNER_BOTRIGHT]];
 }
 
+ptIter PieceData::getEdgeBegin(int num)
+{
+	vector<Point>::iterator it;
+	it = m_edgeData.begin();
+	it += m_cornerIndexs[num];
+
+	return it;
+}
+
+ptIter PieceData::getEdgeEnd(int num)
+{
+	vector<Point>::iterator it;
+	it = m_edgeData.begin();
+	it += m_cornerIndexs[(num + 1) % EDGE_COUNT] + 1;
+
+	return it;
+}
+
+ptIter PieceData::begin()
+{
+	return m_edgeData.begin();	
+}
+
+ptIter PieceData::end()
+{
+	return m_edgeData.end();
+}
 int PieceData::getEdgeType(int num)
 {
 	return m_edgeType[num];
 }
 
-void PieceData::splitEdges()
-{
-	for (int i = 0; i < EDGE_COUNT; i++) 
-	{
-		m_edgeList[i].clear();
-	}
-
-	int edge_index = 0;
-	int next_edge_index = (edge_index + 1) % EDGE_COUNT;
-	int point_index = m_cornerIndexs[0];
-
-	while(edge_index < EDGE_COUNT)
-	{
-	
-		m_edgeList[edge_index].push_back(m_edgeData[point_index]);
-		
-		if (point_index == m_cornerIndexs[next_edge_index])
-		{
-			edge_index ++;
-			next_edge_index = (edge_index + 1) % EDGE_COUNT;
-			
-			if (edge_index == EDGE_COUNT)
-			{
-				m_edgeList[0].insert(m_edgeList[0].begin(), m_edgeData[point_index]);
-			}
-			else
-			{
-				m_edgeList[edge_index].push_back(m_edgeData[point_index]);
-			}
-		}
-
-		point_index = (point_index + 1) % m_edgeData.size();
-	}
-}
-
-#define ROTATION_PADDING 80
+#define ROTATION_PADDING 200
 #define ROTATION_PADDING_OFFSET Point(ROTATION_PADDING, ROTATION_PADDING)
 void PieceData::rotate(double rotation)
 {

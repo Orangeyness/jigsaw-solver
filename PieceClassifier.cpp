@@ -28,11 +28,11 @@
 Point origin_point(vector<Point>& edge);
 vector<Point> find_corner_points(vector<Point>& smoothed_edge, Size area);
 vector<int> find_corner_indexs(vector<Point>& edge, vector<Point>& corner_points);
-int classify_edge(list<Point>* edge);
+int classify_edge(PieceData* pd, int edge_index);
 int piece_classifier(string piece_filename, bool debug);
 
-void drawLineList(Mat display_img, list<Point>* point_list, Scalar color, int line_width);
-void display(PieceData &piece, string window_name);
+void drawEdge(Mat display_img, PieceData* pd, int edge_index, Scalar color, int line_width);
+void display(PieceData* piece, string window_name);
 //---
 
 // argv should contain list of filenames for image segments 
@@ -85,26 +85,13 @@ int piece_classifier(string piece_filename, bool debug)
 	}
 
 	vector<int> corner_indexs = find_corner_indexs(edge, corner_points);
-	
-	/*Point top_right = edge[corner_indexs[0]];
-	Point top_left = edge[corner_indexs[1]];
-	
-	double angle = atan2(top_right.y - top_left.y, top_right.x - top_left.x);
-	pd.rotate(-angle);*/
-	/*
-	double cos_r = cos(angle);
-	double sin_r = sin(angle);
-	(*it).x = (int)(xx * cos_r - yy * sin_r);
-	//(*it).x * cos(rotation) - (*it).y * sin(rotation);
-	(*it).y = (int)(xx * sin_r + yy * cos_r);
-	*/
 
 	pd.setCornerIndexs(corner_indexs);
 
 	cout << "Piece '"<< piece_filename << "'\t - Edges: \t";
 	for (int i = 0; i < EDGE_COUNT; i++) 
 	{
-		int type = classify_edge(pd.getEdgePoints(i));
+		int type = classify_edge(&pd, i);
 
 		pd.setEdgeType(i, type);
 
@@ -112,50 +99,23 @@ int piece_classifier(string piece_filename, bool debug)
 	}
 	cout << endl;
 
-	if (debug) display(pd, piece_filename);
+	if (debug) display(&pd, piece_filename);
 
 	pd.write(piece_filename);
 
 	return EXIT_SUCCESS;
 }
 
-void normalise_point_rotation(list<Point>* point_list, double rotation)
-{
-	list<Point>::iterator it;
-
-	double cos_r = cos(rotation);
-	double sin_r = sin(rotation);
-
-	for (it = point_list->begin(); it != point_list->end(); it++)
-	{
-		double xx = (*it).x;
-		double yy = (*it).y;
-		
-		(*it).x = (int)(xx * cos_r - yy * sin_r);
-		//(*it).x * cos(rotation) - (*it).y * sin(rotation);
-		(*it).y = (int)(xx * sin_r + yy * cos_r);
-		//(*it).x * sin(rotation) + (*it).y * cos(rotation);
-	}
-}
-
-void normalise_point_position(list<Point>* point_list, Point base)
-{
-	list<Point>::iterator it;
-
-	for (it = point_list->begin(); it != point_list->end(); it++)
-	{
-		(*it).x = (*it).x - base.x;
-		(*it).y = (*it).y - base.y;
-	}
-}
-
-
 // Classifies an edge as one of {EDGE_TYPE_FLAT, EDGE_TYPE_IN, EDGE_TYPE_OUT}. 
-int classify_edge(list<Point>* edge)
+int classify_edge(PieceData* pd, int edge_index)
 {
-	Point first_corner = edge->front();
-	Point second_corner = edge->back();
-	list<Point>::iterator it;
+	ptIter edge_begin = pd->getEdgeBegin(edge_index);
+	ptIter edge_end = pd->getEdgeEnd(edge_index);
+	ptIter piece_begin = pd->begin();
+	ptIter piece_end = pd->end();
+
+	Point first_corner = *edge_begin;
+	Point second_corner = *(edge_end - 1);
 	
 	int origin_side_of_line = side_of_line(Point(0, 0), first_corner, second_corner);
 	double origin_dist_to_line = distance_from_line(Point(0, 0), first_corner, second_corner);
@@ -163,14 +123,21 @@ int classify_edge(list<Point>* edge)
 	// Keeps track of direction lumps on the line tend to be pointing
 	int edge_bias = 0;
 
-	for(it = edge->begin(); it != edge->end(); it++) 
+	ptIter iter = edge_begin;
+	while(iter != edge_end)
 	{
-		if (distance_from_line(*it, first_corner, second_corner) > origin_dist_to_line / EDGE_STRAY_THRESHOLD)
+		if (distance_from_line(*iter, first_corner, second_corner) > origin_dist_to_line / EDGE_STRAY_THRESHOLD)
 		{
 			//Either 1 or -1 depending on which side of line it falls on
-			int side = side_of_line(*it, first_corner, second_corner);			
+			int side = side_of_line(*iter, first_corner, second_corner);			
 		
 			edge_bias += side;			
+		}
+
+		iter ++;
+		if (iter == piece_end && piece_end != edge_end)
+		{
+			iter = piece_begin;
 		}
 	}
 
@@ -368,42 +335,60 @@ Point origin_point(vector<Point>& edge)
 }
 
 
-void drawLineList(Mat display_img, list<Point>* point_list, Point offset, Scalar color, int line_width)
+void drawEdge(Mat display_img, PieceData* pd, int edge_index, Scalar color, int line_width)
 {
-	list<Point>::iterator it = point_list->begin();
-	Point* prev_point = &*it;
+	ptIter iter = pd->getEdgeBegin(edge_index);
+	ptIter edge_end = pd->getEdgeEnd(edge_index);
+	ptIter piece_begin = pd->begin();
+	ptIter piece_end = pd->end();
 
-	while(++it != point_list->end())
+	Point origin = pd->origin();
+
+	Point prev_point = *iter;
+	prev_point.x = prev_point.x + origin.x;
+	prev_point.y = prev_point.y + origin.y;
+
+	while(iter != edge_end)
 	{
-		Point* current_point = &*it;
-		line(display_img, *prev_point + offset, *current_point + offset, color, line_width);
+		Point current_point = *iter;
+		current_point.x = current_point.x + origin.x;
+		current_point.y = current_point.y + origin.y;
+
+		line(display_img, prev_point, current_point, color, line_width);
 
 		prev_point = current_point;
+
+		iter ++;
+
+		if (iter == piece_end && piece_end != edge_end)
+		{
+			iter = piece_begin;	
+		}		
 	}
 }
 
-void display(PieceData &piece, string window_name)
+void display(PieceData* piece, string window_name)
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
-	Mat raw_img = piece.image();
+	Mat raw_img = piece->image();
 	Mat display_img;
 	display_img.create(raw_img.size(), raw_img.type());
 	raw_img.copyTo(display_img);
 
-	drawLineList(display_img, piece.getEdgePoints(0), piece.origin(), Scalar(128, 128, 0), 2);
-	drawLineList(display_img, piece.getEdgePoints(1), piece.origin(), Scalar(0, 255, 0), 2);
-	drawLineList(display_img, piece.getEdgePoints(2), piece.origin(), Scalar(0, 0, 255), 2);
-	drawLineList(display_img, piece.getEdgePoints(3), piece.origin(), Scalar(255, 255, 210), 2);
+	drawEdge(display_img, piece, 0, Scalar(128, 128,   0), 2);
+	drawEdge(display_img, piece, 1, Scalar(  0, 255,   0), 2);
+	drawEdge(display_img, piece, 2, Scalar(  0,   0, 255), 2);
+	drawEdge(display_img, piece, 3, Scalar(255, 255,   0), 2);
 
 	Point test_origin (raw_img.cols / 2, raw_img.rows / 2);
 
-	circle(display_img, piece.origin(), 5, Scalar(0, 255, 0), -1);
+	circle(display_img, piece->origin(), 5, Scalar(0, 255, 0), -1);
 	circle(display_img, test_origin, 5, Scalar(255, 0, 0), -1);
 
 	for (int i = 0; i < EDGE_COUNT; i++) 
 	{
-		circle(display_img, piece.edge()[piece.getCornerIndex(i)] + piece.origin(), 6, Scalar(128, i*60, 255), -1);
+		circle(display_img, piece->edge()[piece->getCornerIndex(i)] + piece->origin(), 6, Scalar(128, i*60, 255), -1);
 	}
 
 	imshow(window_name, display_img);

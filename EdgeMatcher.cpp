@@ -19,6 +19,57 @@
 
 #define ROTATE_PADDING 50
 
+void get_edge_points(Edge* edge, vector<Point>& out)
+{
+	PieceData* pd = edge->piece();
+	int edge_index = edge->index();
+
+	ptIter edge_begin = pd->getEdgeBegin(edge_index);
+	ptIter edge_end = pd->getEdgeEnd(edge_index);
+	ptIter piece_begin = pd->begin();
+	ptIter piece_end = pd->end();
+
+	ptIter iter = edge_begin;
+
+	while(iter != edge_end)
+	{
+		out.push_back(*iter);
+
+		iter ++;
+
+		if (iter == piece_end && piece_end != edge_end)
+		{
+			iter = piece_begin;	
+		}		
+	}
+}
+
+void get_reverse_edge_points(Edge* edge, vector<Point>& out)
+{
+	PieceData* pd = edge->piece();
+	int edge_index = edge->index();
+
+	ptIter edge_begin = pd->getEdgeBegin(edge_index);
+	ptIter edge_end = pd->getEdgeEnd(edge_index);
+	ptIter piece_begin = pd->begin();
+	ptIter piece_end = pd->end();
+
+	ptIter iter = edge_end;
+
+	do 
+	{
+		iter --;
+
+		out.push_back(*iter);
+
+		if (iter == piece_begin && piece_begin != edge_begin)
+		{
+			iter = piece_end;	
+		}		
+	}
+	while(iter != edge_begin);
+}
+
 
 double compute_coupling_distance(vector<Point>& curveA, vector<Point>& curveB, int i, int j, vector<vector<double> >& ca)
 {
@@ -51,27 +102,26 @@ double compute_coupling_distance(vector<Point>& curveA, vector<Point>& curveB, i
 	return ca[i][j];
 }
 
-double coupling_distance(list<Point>* curveA, list<Point>* curveB)
+double coupling_distance(Edge* edgeA, Edge* edgeB)
 {
-	vector<vector<double> > ca (curveA->size());
+	vector<Point> curveA;
+	vector<Point> curveB;
 
-	for (int i = 0; i < curveA->size(); i++) 
+	get_edge_points(edgeA, curveA);
+	get_reverse_edge_points(edgeB, curveB);
+	
+	vector<vector<double> > ca (curveA.size());
+
+	for (int i = 0; i < curveA.size(); i++) 
 	{
-		ca[i] = vector<double>(curveB->size());
-		for(int j = 0; j < curveB->size(); j++)
+		ca[i] = vector<double>(curveB.size());
+		for(int j = 0; j < curveB.size(); j++)
 		{
 			ca[i][j] = -1;
 		}
 	}
 
-	curveB->reverse();
-
-	vector<Point> vec_curveA (curveA->begin(), curveA->end());
-	vector<Point> vec_curveB (curveB->begin(), curveB->end());
-
-	curveB->reverse();
-
-	return compute_coupling_distance(vec_curveA, vec_curveB, curveA->size() - 1, curveB->size() - 1, ca);
+	return compute_coupling_distance(curveA, curveB, curveA.size() - 1, curveB.size() - 1, ca);
 }
 
 double hausdorff_measure(list<Point>* curveA, list<Point>* curveB)
@@ -166,54 +216,54 @@ void overlayImage(const cv::Mat &background, const cv::Mat &foreground, cv::Mat 
 	}
 }
 
-void drawLineList(Mat display_img, list<Point>* point_list, Scalar color, int line_width)
+void drawEdge(Mat display_img, PieceData* pd, int edge_index, Scalar color, int line_width, Point origin = Point(0, 0))
 {
-	list<Point>::iterator it = point_list->begin();
-	Point* prev_point = &*it;
+	ptIter iter = pd->getEdgeBegin(edge_index);
+	ptIter edge_end = pd->getEdgeEnd(edge_index);
+	ptIter piece_begin = pd->begin();
+	ptIter piece_end = pd->end();
 
-	while(++it != point_list->end())
-	{
-		Point* current_point = &*it;
-		line(display_img, *prev_point, *current_point, color, line_width);
-
-		prev_point = current_point;
-	}
-}
-
-void drawLineListOffset(Mat display_img, list<Point>* point_list, Scalar color, int line_width, Point origin)
-{
-	list<Point>::iterator it = point_list->begin();
-	Point prev_point = *it;
+	Point prev_point = *iter;
 	prev_point.x = prev_point.x + origin.x;
 	prev_point.y = prev_point.y + origin.y;
 
-	while(++it != point_list->end())
+	while(iter != edge_end)
 	{
-		Point current_point = *it;
+		Point current_point = *iter;
 		current_point.x = current_point.x + origin.x;
 		current_point.y = current_point.y + origin.y;
 
 		line(display_img, prev_point, current_point, color, line_width);
 
 		prev_point = current_point;
+
+		iter ++;
+
+		if (iter == piece_end && piece_end != edge_end)
+		{
+			iter = piece_begin;	
+		}		
 	}
 }
 
-void display_edge(Edge& edge, string window_name, Scalar color = Scalar(0, 255, 0))
+void display_edge(Edge* edge, string window_name, Scalar color = Scalar(0, 255, 0))
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
-	Mat raw_img = edge.piece()->image();
+	Mat raw_img = edge->piece()->image();
 	Mat display_img;
 	display_img.create(raw_img.size(), raw_img.type());
 
+	circle(display_img, edge->piece()->origin(), 5, Scalar(0, 255, 0), -1);
+
 	for (int i = 0; i < EDGE_COUNT; i++) 
 	{
-		if (i == edge.index()) continue;
-		drawLineList(display_img, edge.piece()->getEdgePoints(i), Scalar(128, 128, 128), 1);
+		if (i == edge->index()) continue;
+		
+		drawEdge(display_img, edge->piece(), i, Scalar(128, 128, 128), 1, edge->piece()->origin());
 	}
 
-	drawLineList(display_img, edge.points(), color, 2);
+	drawEdge(display_img, edge->piece(), edge->index(), color, 2, edge->piece()->origin());
 
 	imshow(window_name, display_img);
 }
@@ -239,114 +289,44 @@ void display_image_comparision(Mat edgeIn, Mat edgeOut, string window_name)
 	imshow(window_name, display_img);
 }
 
-void display_edge_comparision(Edge& edgeIn, Edge& edgeOut, String window_name)
+void display_edge_comparision(Edge* edgeIn, Edge* edgeOut, String window_name)
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
-	Mat raw_img = edgeIn.piece()->image();
+	Mat raw_img = edgeIn->piece()->image();
 	Mat display_img;
 	display_img.create(Size(600, 600), raw_img.type());
 
-	Point origin = Point(200, 200);
+	Point origin (20, 100);
 	circle(display_img, origin, 6, Scalar(255, 255, 255), -1);
 
-	circle(display_img, edgeIn.firstPoint() + origin, 4, Scalar(255, 0, 0), -1);
-	circle(display_img, edgeIn.lastPoint() + origin, 4, Scalar(0, 0, 255), -1);
-	circle(display_img, edgeOut.firstPoint() + origin, 4, Scalar(255, 0, 0), -1);
-	circle(display_img, edgeOut.lastPoint() + origin, 4, Scalar(0, 0, 255), -1);
+	circle(display_img, edgeIn->getFirstCorner() + origin, 4, Scalar(255, 0, 0), -1);
+	circle(display_img, edgeIn->getSecondCorner() + origin, 4, Scalar(0, 0, 255), -1);
+	circle(display_img, edgeOut->getFirstCorner() + origin, 4, Scalar(255, 0, 0), -1);
+	circle(display_img, edgeOut->getSecondCorner() + origin, 4, Scalar(0, 0, 255), -1);
 
-	line(display_img, edgeOut.firstPoint() + origin, edgeOut.lastPoint() + origin, Scalar(128, 128, 128), 1);
-	line(display_img, edgeIn.firstPoint() + origin, edgeIn.lastPoint() + origin, Scalar(128, 128, 128), 1);
+	line(display_img, edgeIn->getFirstCorner() + origin, edgeIn->getSecondCorner() + origin, Scalar(128, 128, 128), 1);
+	line(display_img, edgeOut->getFirstCorner() + origin, edgeOut->getSecondCorner() + origin, Scalar(128, 128, 128), 1);
 
-	drawLineListOffset(display_img, edgeIn.points(), Scalar(0, 255, 0), 2, origin);
-	drawLineListOffset(display_img, edgeOut.points(), Scalar(255, 0, 0), 2, origin);
+	drawEdge(display_img, edgeIn->piece(), edgeIn->index(), Scalar(0, 255, 0), 2, origin);
+	drawEdge(display_img, edgeOut->piece(), edgeOut->index(), Scalar(255, 0, 0), 2, origin);
 
 	imshow(window_name, display_img);
 }
 
-void normalise_point_position(list<Point>* point_list, Point base)
+//I don't know...
+//Am I depressed? I can't tell. How does one tell.
+//Seriously. I might be. Fuck.
+//Probably just being dramatic.
+
+double getEdgeAtan(Edge* edge)
 {
-	list<Point>::iterator it;
+	Point corner_first = edge->getFirstCorner();
+	Point corner_second = edge->getSecondCorner();
 
-	for (it = point_list->begin(); it != point_list->end(); it++)
-	{
-		(*it).x = (*it).x - base.x;
-		(*it).y = (*it).y - base.y;
-	}
-}
+	double angle = atan2(corner_first.y - corner_second.y, corner_first.x - corner_second.x);
 
-void normalise_point_rotation(list<Point>* point_list, double rotation)
-{
-	list<Point>::iterator it;
-
-	double cos_r = cos(rotation);
-	double sin_r = sin(rotation);
-
-	for (it = point_list->begin(); it != point_list->end(); it++)
-	{
-		double xx = (*it).x;
-		double yy = (*it).y;
-		
-		(*it).x = (int)(xx * cos_r - yy * sin_r);
-		//(*it).x * cos(rotation) - (*it).y * sin(rotation);
-		(*it).y = (int)(xx * sin_r + yy * cos_r);
-		//(*it).x * sin(rotation) + (*it).y * cos(rotation);
-	}
-}
-
-void rotate_edge_around_origin(Edge* edge, Mat& edge_image)
-{
-	Point piece_origin = edge->piece()->origin();
-	normalise_point_position(edge->points(), piece_origin);
-
-	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
-	Point desired_pos = Point(0, 100);
-
-	double angle = interior_angle(Point(0, 0), midpoint, desired_pos);
-
-	Mat rot_mat = getRotationMatrix2D(piece_origin, TO_DEGREE(angle), 1.0);
-	warpAffine(edge_image, edge_image, rot_mat, edge_image.size());
-
-	normalise_point_rotation(edge->points(), -angle);
-}
-
-void flip_edge_around_midpoint(Edge* edge, Mat& edge_image)
-{
-	Point piece_origin = edge->piece()->origin();
-	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
-	normalise_point_rotation(edge->points(), PI);
-
-
-	Mat rot_mat = getRotationMatrix2D(piece_origin + midpoint, TO_DEGREE(PI), 1.0);
-	warpAffine(edge_image, edge_image, rot_mat, edge_image.size());
-}
-
-void rotate_edge_around_midpoint(Edge* edge, Mat& edge_image)
-{
-	Point piece_origin = edge->piece()->origin();
-	Point midpoint = midpoint_of_line(edge->firstPoint(), edge->lastPoint());
-	normalise_point_position(edge->points(), midpoint);
-
-	Point normalised_first_point = edge->firstPoint();
-	normalised_first_point.y = 0;
-
-	double angle = interior_angle(Point(0, 0), normalised_first_point, edge->firstPoint());
-	normalise_point_rotation(edge->points(), angle);
-
-	Mat rot_mat = getRotationMatrix2D(piece_origin + midpoint, TO_DEGREE(-angle), 1.0);
-	warpAffine(edge_image, edge_image, rot_mat, edge_image.size());
-
-	//TODO: fix this when awake and understand angles
-	// check if line is now perpendicular to y axis
-	if (abs(TO_DEGREE(interior_angle(Point(0, 0), Point(0, 10), edge->lastPoint())) - 90) > 0.01 )
-	{
-		// if not we rotated in wrong direction?
-		// so rotate back twice as much
-		normalise_point_rotation(edge->points(), -angle*2);
-
-		rot_mat = getRotationMatrix2D(piece_origin + midpoint, TO_DEGREE(angle*2), 1.0);
-		warpAffine(edge_image, edge_image, rot_mat, edge_image.size());
-	}
+	return angle;
 }
 
 int main(int argc, char* argv[]) 
@@ -366,8 +346,8 @@ int main(int argc, char* argv[])
 	if (edge1.type() == EDGE_TYPE_FLAT)
 	{
 		cout << "First edge is flat." << endl;
-		display_edge(edge1, "Edge A");
-		display_edge(edge2, "Edge B");
+		display_edge(&edge1, "Edge A");
+		display_edge(&edge2, "Edge B");
 
 		waitKey();
 		return EXIT_FAILURE;
@@ -376,8 +356,8 @@ int main(int argc, char* argv[])
 	if (edge2.type() == EDGE_TYPE_FLAT)
 	{
 		cout << "Second edge is flat" << endl;
-		display_edge(edge1, "Edge A");
-		display_edge(edge2, "Edge B");
+		display_edge(&edge1, "Edge A");
+		display_edge(&edge2, "Edge B");
 
 		waitKey();
 		return EXIT_FAILURE;
@@ -386,8 +366,8 @@ int main(int argc, char* argv[])
 	if (edge1.type() == edge2.type())
 	{
 		cout << "Edges same type." << endl;
-		display_edge(edge1, "Edge A");
-		display_edge(edge2, "Edge B");
+		display_edge(&edge1, "Edge A");
+		display_edge(&edge2, "Edge B");
 
 		waitKey();
 		return EXIT_FAILURE;
@@ -396,41 +376,23 @@ int main(int argc, char* argv[])
 	edgeIn = (edge1.type() == EDGE_TYPE_IN ? &edge1 : &edge2);
 	edgeOut = (edge1.type() == EDGE_TYPE_OUT ? &edge1 : &edge2);
 
-	Mat edge_in_image = edgeIn->piece()->image().clone();
-	Mat edge_out_image = edgeOut->piece()->image().clone();
+	double angle = getEdgeAtan(edgeIn);
+	edgeIn->piece()->rotate(-angle);
 
-	display_edge(*edgeIn, "Edge In", Scalar(0, 255, 0));
-	display_edge(*edgeOut, "Edge Out", Scalar(255, 0, 0));
+	angle = getEdgeAtan(edgeOut);
+	edgeOut->piece()->rotate(-angle + PI);
+	
+	display_edge(edgeIn, "Edge In", Scalar(0, 255, 0));
+	display_edge(edgeOut, "Edge Out", Scalar(255, 0, 0));
 
-	rotate_edge_around_origin(edgeOut, edge_out_image);
-	rotate_edge_around_midpoint(edgeOut, edge_out_image);
+	edgeIn->piece()->setOrigin(edgeIn->getSecondCorner());
+	edgeOut->piece()->setOrigin(edgeOut->getFirstCorner());
 
-	if (edgeOut->firstPoint().x < edgeOut->lastPoint().x)
-	{
-		flip_edge_around_midpoint(edgeOut, edge_out_image);
-	}
+	display_edge_comparision(edgeIn, edgeOut, "Edge Comparision");
 
-	//rotate_edge_around_origin(edgeIn, edge_in_image);
-	rotate_edge_around_midpoint(edgeIn, edge_in_image);
+	double coupling_dist = coupling_distance(edgeIn, edgeOut);
 
-	if (edgeIn->firstPoint().x > edgeIn->lastPoint().x)
-	{
-		flip_edge_around_midpoint(edgeIn, edge_in_image);
-	}
-
-	normalise_point_position(edgeIn->points(), edgeIn->firstPoint());
-	normalise_point_position(edgeOut->points(), edgeOut->lastPoint());
-
-	display_edge_comparision(*edgeIn, *edgeOut, "Edge Comparision");
-	//display_image_comparision(edge_in_image, edge_out_image, "Image Comparision");
-
-	//display_image(edge_in_image, "Image - Edge In");
-	//display_image(edge_out_image, "Image - Edge Out");
-
-	double coupling_dist = coupling_distance(edgeIn->points(), edgeOut->points());
-	double h_dist = h_measure(edgeIn->points(), edgeOut->points());
-
-	if (coupling_dist <= COUPLING_DISTANCE_THRESHOLD && h_dist <= H_DISTANCE_THRESHOLD)
+	if (coupling_dist <= COUPLING_DISTANCE_THRESHOLD)
 	{
 		cout << "MATCH" << endl;
 	}
@@ -438,10 +400,8 @@ int main(int argc, char* argv[])
 	{
 		cout << "Probably not match" << endl;
 	}
-
 	cout << coupling_dist << endl;
-	cout << h_dist << endl;
-	
+	//cout << h_dist << endl;
 
 	waitKey();
 	return EXIT_SUCCESS;
