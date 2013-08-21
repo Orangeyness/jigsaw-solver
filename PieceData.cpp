@@ -260,6 +260,11 @@ void PieceData::rotate(double rotation)
 	warpAffine(target, rotated_img, rot_mat, target.size());
 
 	Rect bounding_rect = contour_bounding_rect(m_edgeData) + m_origin;
+	bounding_rect.x -= 5;
+	bounding_rect.y -= 5;
+	bounding_rect.width += 10;
+	bounding_rect.height += 10;
+
 	m_imageData = rotated_img(bounding_rect);
 	m_origin = m_origin - Point(bounding_rect.x, bounding_rect.y);
 }

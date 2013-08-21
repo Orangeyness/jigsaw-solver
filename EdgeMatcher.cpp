@@ -15,7 +15,7 @@
 #include "GeometryHelpers.h"
 
 #define COUPLING_DISTANCE_THRESHOLD 35
-#define H_DISTANCE_THRESHOLD 12
+#define AVG_MIN_DISTANCE_THRESHOLD 12
 
 #define ROTATE_PADDING 50
 
@@ -124,46 +124,25 @@ double coupling_distance(Edge* edgeA, Edge* edgeB)
 	return compute_coupling_distance(curveA, curveB, curveA.size() - 1, curveB.size() - 1, ca);
 }
 
-double hausdorff_measure(list<Point>* curveA, list<Point>* curveB)
+double average_min_dist_measure(Edge* edgeA, Edge* edgeB)
 {
-	double hausdorff_dist = 0;
+	vector<Point> curveA;
+	vector<Point> curveB;
 
-	list<Point>::iterator itA = curveA->begin();
+	get_edge_points(edgeA, curveA);
+	get_edge_points(edgeB, curveB);
 
-	while(++itA != curveA->end())
-	{
-		double shortest = 99999;
-
-		list<Point>::iterator itB = curveB->begin();
-
-		while(++itB != curveB->end())
-		{
-			double dist = euclid_distance(*itA, *itB);
-			
-			if (dist < shortest)
-				shortest = dist;
-		}
-
-		if (shortest > hausdorff_dist)
-			hausdorff_dist = shortest;
-	}
-	
-	return hausdorff_dist;
-}
-
-double h_measure(list<Point>* curveA, list<Point>* curveB)
-{
 	double total_min_distances = 0;
 
-	list<Point>::iterator itA = curveA->begin();
+	vector<Point>::iterator itA = curveA.begin();
 
-	while(++itA != curveA->end())
+	while(++itA != curveA.end())
 	{
 		double min_distance = 99999;
 
-		list<Point>::iterator itB = curveB->begin();
+		vector<Point>::iterator itB = curveB.begin();
 
-		while(++itB != curveB->end())
+		while(++itB != curveB.end())
 		{
 			double dist = euclid_distance(*itA, *itB);
 			
@@ -174,7 +153,7 @@ double h_measure(list<Point>* curveA, list<Point>* curveB)
 		total_min_distances += min_distance;
 	}
 	
-	return total_min_distances / curveA->size();
+	return total_min_distances / curveA.size();
 }
 
 
@@ -275,16 +254,33 @@ void display_image(Mat& img, string window_name)
 	imshow(window_name, img);
 }
 
-void display_image_comparision(Mat edgeIn, Mat edgeOut, string window_name)
+void display_image_comparision(Edge* edgeIn, Edge* edgeOut, string window_name)
 {
 	namedWindow(window_name, CV_WINDOW_AUTOSIZE);
 
-	Mat raw_img = edgeIn;
+	Mat raw_img = edgeIn->piece()->image();
 	Mat display_img;
-	display_img.create(Size(1000, 1000), raw_img.type());
+	display_img.create(Size(1000, 1200), raw_img.type());
 
-	//overlayImage(display_img, edgeIn, display_img, Point(10, 10));	
-	//overlayImage(display_img, edgeOut, display_img, Point(10, edgeIn.size().height));	
+	Point first_origin = edgeIn->piece()->origin();
+	Point second_origin = edgeOut->piece()->origin();
+	Point first_midpoint = midpoint_of_line(edgeIn->getFirstCorner(), edgeIn->getSecondCorner());
+	Point second_midpoint = midpoint_of_line(edgeOut->getFirstCorner(), edgeOut->getSecondCorner());
+
+	cout << first_midpoint << endl;
+	cout << second_midpoint << endl;
+
+	int ydiff = edgeOut->piece()->image().size().height - (second_origin.y + second_midpoint.y);
+
+	first_midpoint.y = 0;
+	second_midpoint.y = 0;
+	first_origin.y = 0;
+ 	second_origin.y = 0;
+
+	Point display_offset = Point(-150, 5);
+
+	overlayImage(display_img, edgeOut->piece()->image(), display_img, display_offset + first_midpoint + first_origin);
+	overlayImage(display_img, edgeIn->piece()->image(), display_img, display_offset + Point(0, edgeOut->piece()->image().size().height - ydiff) + second_midpoint + second_origin);
 
 	imshow(window_name, display_img);
 }
@@ -313,11 +309,6 @@ void display_edge_comparision(Edge* edgeIn, Edge* edgeOut, String window_name)
 
 	imshow(window_name, display_img);
 }
-
-//I don't know...
-//Am I depressed? I can't tell. How does one tell.
-//Seriously. I might be. Fuck.
-//Probably just being dramatic.
 
 double getEdgeAtan(Edge* edge)
 {
@@ -385,14 +376,17 @@ int main(int argc, char* argv[])
 	display_edge(edgeIn, "Edge In", Scalar(0, 255, 0));
 	display_edge(edgeOut, "Edge Out", Scalar(255, 0, 0));
 
+	display_image_comparision(edgeIn, edgeOut, "Image Comparision");
+
 	edgeIn->piece()->setOrigin(edgeIn->getSecondCorner());
 	edgeOut->piece()->setOrigin(edgeOut->getFirstCorner());
 
 	display_edge_comparision(edgeIn, edgeOut, "Edge Comparision");
 
 	double coupling_dist = coupling_distance(edgeIn, edgeOut);
+	double average_min_dist = average_min_dist_measure(edgeIn, edgeOut);
 
-	if (coupling_dist <= COUPLING_DISTANCE_THRESHOLD)
+	if (coupling_dist <= COUPLING_DISTANCE_THRESHOLD && average_min_dist <= AVG_MIN_DISTANCE_THRESHOLD)
 	{
 		cout << "MATCH" << endl;
 	}
@@ -401,7 +395,7 @@ int main(int argc, char* argv[])
 		cout << "Probably not match" << endl;
 	}
 	cout << coupling_dist << endl;
-	//cout << h_dist << endl;
+	cout << average_min_dist << endl;
 
 	waitKey();
 	return EXIT_SUCCESS;
