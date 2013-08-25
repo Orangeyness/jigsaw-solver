@@ -221,9 +221,31 @@ ptIter PieceData::end()
 {
 	return m_edgeData.end();
 }
+
 int PieceData::getEdgeType(int num)
 {
 	return m_edgeType[num];
+}
+
+// Helper function to increment an iterator taking into account
+// it wrapping around the vector until it finds the end. 
+ptIter PieceData::increment(ptIter iter, int dir, ptIter end)
+{
+	ptIter piece_end = this->end();
+	ptIter piece_begin = this->begin();
+
+	iter += dir;
+
+	if (iter == piece_end && piece_end != end)
+	{
+		iter = piece_begin;	
+	}		
+	else if (iter == piece_begin && piece_begin != end)
+	{
+		iter = piece_end;	
+	}		
+
+	return iter;
 }
 
 #define ROTATION_PADDING 200

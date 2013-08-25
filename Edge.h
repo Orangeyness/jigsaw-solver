@@ -15,6 +15,8 @@ class Edge
 		Edge(string filename, int edge);
 		Point getFirstCorner();
 		Point getSecondCorner();
+		ptIter begin();
+		ptIter end();
 		int index();
 		int type();
 		PieceData* piece();

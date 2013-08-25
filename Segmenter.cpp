@@ -11,22 +11,22 @@
 
 #define RESIZE_DIVIDER 1
 
-#define BLUR_KERNEL_SIZE 5
-#define CANNY_RATIO 3
-#define CANNY_THRESHOLD_R 200
-#define CANNY_THRESHOLD_G 200
-#define CANNY_THRESHOLD_B 225
+#define BLUR_KERNEL_SIZE 3
+#define CANNY_RATIO 2
+#define CANNY_THRESHOLD_R 40
+#define CANNY_THRESHOLD_G 40
+#define CANNY_THRESHOLD_B 40
 
 //#define MORPH_CHANNEL
 #define MORPH_CHANNEL_ELEM MORPH_ELLIPSE
 #define MORPH_CHANNEL_SIZE 2
 #define MORPH_CHANNEL_OP MORPH_CLOSE
 
-#define MORPH_CLOSE_ELEM MORPH_ELLIPSE
+#define MORPH_CLOSE_ELEM MORPH_RECT
 #define MORPH_CLOSE_SIZE 5
 
 #define MORPH_OPEN_ELEM MORPH_ELLIPSE
-#define MORPH_OPEN_SIZE 10
+#define MORPH_OPEN_SIZE 25
 
 #define SMOOTH_BLUR 0
 #define SMOOTH_EPSILON 1
@@ -122,8 +122,7 @@ int segmenter(string filename, int output_offset, bool debug)
 	Mat close_morph_element = getStructuringElement(MORPH_CLOSE_ELEM, Size(2*MORPH_CLOSE_SIZE+1, 2*MORPH_CLOSE_SIZE+1), Point(MORPH_CLOSE_SIZE, MORPH_CLOSE_SIZE));
 	morphologyEx(edge_map, edge_map, MORPH_CLOSE, close_morph_element);
 
-
-	if (debug) display(filename, "Edge Map", edge_map, 0.3);
+	if (debug) display(filename, "Edge Map", edge_map, 0.6);
 
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
@@ -141,6 +140,8 @@ int segmenter(string filename, int output_offset, bool debug)
 
 	Mat open_morph_element = getStructuringElement(MORPH_OPEN_ELEM, Size(2*MORPH_OPEN_SIZE+1, 2*MORPH_OPEN_SIZE+1), Point(MORPH_OPEN_SIZE, MORPH_OPEN_SIZE));
 	morphologyEx(mask, mask, MORPH_OPEN, open_morph_element);
+
+	if (debug) display(filename, "Mask", mask, 0.6);
 	
 	findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS, Point(0, 0));
 
@@ -159,9 +160,9 @@ int segmenter(string filename, int output_offset, bool debug)
 		}
 
 		bitwise_and(display_mask, src_image, output);
-		display(filename, "Output", output, 0.3);
-		display(filename, "Contour Map", contour_img, 0.3);
-		display(filename, "Mask", display_mask, 0.3);
+		display(filename, "Output", output, 0.6);
+		display(filename, "Contour Map", contour_img, 0.6);
+		display(filename, "Mask", display_mask, 0.6);
 		imwrite("output.png", display_mask);
 	}
 

@@ -8,12 +8,22 @@ Edge::Edge(string filename, int edge) : pd (filename)
 
 Point Edge::getFirstCorner()
 {
-	return *(pd.getEdgeBegin(edge_index));
+	return *begin();
 }
 
 Point Edge::getSecondCorner()
 {
-	return *(pd.getEdgeEnd(edge_index) - 1);
+	return *end();
+}
+
+ptIter Edge::begin()
+{
+	return pd.getEdgeBegin(edge_index);
+}
+
+ptIter Edge::end()
+{
+	return pd.getEdgeEnd(edge_index);
 }
 
 int Edge::index()

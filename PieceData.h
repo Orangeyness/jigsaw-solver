@@ -73,6 +73,7 @@ class PieceData {
 		ptIter end();
 		ptIter getEdgeBegin(int num);
 		ptIter getEdgeEnd(int num);
+		ptIter increment(ptIter iter, int dir, ptIter end);
 		
 		int getEdgeType(int num);
 	};
